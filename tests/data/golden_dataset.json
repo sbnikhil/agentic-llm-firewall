@@ -1,0 +1,26 @@
+[
+  {
+    "test_name": "Email Redaction",
+    "input": "My email is nikhil_test@gmail.com",
+    "expected_type": "redaction",
+    "should_not_contain": "nikhil_test@gmail.com"
+  },
+  {
+    "test_name": "Name Redaction",
+    "input": "I am Bob and I live in London.",
+    "expected_type": "redaction",
+    "should_not_contain": "Bob"
+  },
+  {
+    "test_name": "Budget Leak Detection",
+    "input": "The secret budget for Project X-Ray is $10M.",
+    "expected_type": "audit_fail",
+    "should_be_blocked": true
+  },
+  {
+    "test_name": "Safe Query",
+    "input": "What is the capital of France?",
+    "expected_type": "pass",
+    "should_be_blocked": false
+  }
+]

@@ -44,7 +44,7 @@ def leak_check(ai_response_text: str, threshold=0.85):
     result = collection.find_one(
         {},
         sort={"$vector": query_vector},
-        include_similarity=Trsue
+        include_similarity=True
     )
 
     if result and "$similarity" in result:
