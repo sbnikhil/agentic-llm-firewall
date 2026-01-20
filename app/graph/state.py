@@ -1,12 +1,15 @@
-from typing import TypedDict, Annotated, Sequence
-from langchain_core.messages import BaseMessage
-from langgraph.graph.message import add_messages
+from typing import TypedDict
 
 class AgentState(TypedDict):
-    messages: Annotated[Sequence[BaseMessage], add_messages]
+    user_id: str
+    user_role: str
     user_input: str
     redacted_input: str
+    topic_level: str
+    blocked: bool
+    block_reason: str
+    rag_context: str
     llm_response: str
-    is_leak: bool
+    passed_output_security: bool
     leak_score: float
     loop_count: int
