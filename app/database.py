@@ -1,4 +1,7 @@
 import os
+import json
+import numpy as np
+from pathlib import Path
 from astrapy import DataAPIClient
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
@@ -17,13 +20,11 @@ db = client.get_database_by_api_endpoint(
 )
 
 if COLLECTION_NAME not in db.list_collection_names():
-    print(f"creating {COLLECTION_NAME} in {KEYSPACE_NAME}...")
     collection = db.create_collection(
         COLLECTION_NAME,
         definition={"vector": {"dimension": 384, "metric": "cosine"}}
     )
 else:
-    print(f"connected to {COLLECTION_NAME} in {KEYSPACE_NAME}.")
     collection = db.get_collection(COLLECTION_NAME)
 
 def log_interaction(original, safe, response):
@@ -35,21 +36,34 @@ def log_interaction(original, safe, response):
         "$vector": vector 
     })
 
-def leak_check(ai_response_text: str, threshold=0.85):
-    """
-    Checks if the AI's response is too similar to any known sensitive data.
-    Returns (is_leak, similarity_score)
-    """
-    query_vector = model.encode(ai_response_text).tolist()
-    result = collection.find_one(
-        {},
-        sort={"$vector": query_vector},
-        include_similarity=True
-    )
+def load_secrets_catalog():
+    catalog_path = Path(__file__).parent.parent / "secrets_catalog.json"
+    try:
+        with open(catalog_path, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
 
-    if result and "$similarity" in result:
-        score = result["$similarity"]
-        if score > threshold:
-            return True, score
+def leak_check(ai_response_text: str, threshold=0.85):
+    secrets_catalog = load_secrets_catalog()
+    
+    if not secrets_catalog:
+        return False, 0.0
+    
+    query_vector = model.encode(ai_response_text).tolist()
+    
+    for secret_entry in secrets_catalog:
+        secret_text = secret_entry.get("text", "")
+        secret_vector = model.encode(secret_text).tolist()
+        import numpy as np
+        response_vec = np.array(query_vector)
+        secret_vec = np.array(secret_vector)
+        
+        similarity = np.dot(response_vec, secret_vec) / (
+            np.linalg.norm(response_vec) * np.linalg.norm(secret_vec)
+        )
+        
+        if similarity > threshold:
+            return True, float(similarity)
     
     return False, 0.0

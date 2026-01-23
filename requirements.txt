@@ -8,6 +8,7 @@ spacy
 langgraph
 langchain
 langchain-community
+numpy
 langchain-astradb
 astrapy
 cassio
@@ -27,3 +28,4 @@ langchain-huggingface
 huggingface_hub
 langchain-google-genai
 google-generativeai
+langchain-ollama
