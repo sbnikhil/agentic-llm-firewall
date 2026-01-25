@@ -55,3 +55,8 @@ htmlcov/
 *.db
 *.sqlite
 *.sqlite3
+
+# Runtime logs and metrics
+security_audit.log
+metrics.json
+*.log
