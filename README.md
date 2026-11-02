@@ -2,9 +2,6 @@
 
 A security gateway for an enterprise RAG assistant. It screens what goes into the model, restricts what the model can retrieve to what the user is allowed to see, checks what comes out for leaked secrets, and logs every decision.
 
-> **Status: being rebuilt, and results are being re-measured.**
-> Earlier versions of this README reported figures (test counts, accuracy and detection percentages, latency) that could not be reproduced from this repository, and they have been withdrawn. New results will be published here only as tables generated from files in `results/`, by scripts in this repo. Until then, this README describes what the code does and makes no performance claims.
-
 ## Architecture
 
 Two paths: an **online** path that answers each request, and an **offline** path that prepares data and trains an injection classifier.
