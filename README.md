@@ -42,27 +42,6 @@ Roles map to document access levels in `config.py`: `employee` → public, inter
 | Fine-tune `protectai/deberta-v3-base-prompt-injection-v2` on SageMaker (`ml.g4dn.xlarge`), selecting the checkpoint by F2, tracked in Weights & Biases | `scripts/run_sagemaker_job.py` → `training/finetune_train.py` |
 | Evaluate injection detection on external datasets — *`evaluate_injection_detection.py` does not currently run: it imports detector functions missing from `input_validator.py`. Both scripts are being replaced by a held-out evaluation harness.* | `scripts/evaluate_injection_detection.py`, `scripts/evaluate_jailbreakbench.py` |
 
-## Known limitations
-
-These are tracked, not hidden. Several are the subject of the current rebuild.
-
-**Evaluation**
-- The only committed test set (`tests/data/golden_dataset.json`, 45 cases) was written by the same author as the defenses, so it can't measure how they generalise.
-- There is no end-to-end measurement yet of attack success against the whole system, of over-blocking of legitimate questions, or of latency.
-- The training pipeline has known data-quality issues (benign and attack examples come from different sources, so a classifier can learn the source rather than the attack) and evaluates on data that overlaps its training set.
-
-**Security**
-- The user's role is supplied by the client in the request body. There is no authentication.
-- Retrieved documents are not scanned for injected instructions before reaching the model, and they are placed in the system prompt.
-- The audit log stores the original, unredacted query.
-- The trained classifier is not yet used at request time.
-
-**Correctness and performance**
-- The keyword layer of the output filter can never trigger, and the dollar-amount pattern also blocks legitimate policy text (e.g. "$500").
-- The `/chat` handler is `async` but runs blocking work, so it doesn't serve requests concurrently.
-- Conversation checkpoints are kept in memory (`MemorySaver`) and lost on restart; Cassandra checkpointing is disabled pending a serialization fix.
-- Documents are not chunked; long emails are truncated at 1500 words, beyond what the embedding model reads (256 tokens).
-
 ## Running it
 
 **Prerequisites:** Docker, an AstraDB vector database, and [Ollama](https://ollama.com) running on the host with the model pulled:
