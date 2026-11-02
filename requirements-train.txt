@@ -1,0 +1,10 @@
+# Dependencies for the offline pipeline scripts in scripts/
+# (ingest_enron, prepare_finetune_data, run_sagemaker_job, evaluators).
+# Install on top of requirements.txt.
+datasets
+pandas
+boto3
+sagemaker
+transformers
+torch
+sentencepiece

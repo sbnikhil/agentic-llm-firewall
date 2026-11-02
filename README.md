@@ -1,141 +1,119 @@
-# AI Security Gateway
+# Agentic LLM Firewall
 
-A multi-layered security framework for AI agents that demonstrates defense-in-depth principles for RAG systems. Built to showcase practical implementation of prompt injection defense, PII redaction, RBAC-filtered retrieval, and semantic leak detection.
+A security gateway for an enterprise RAG assistant. It screens what goes into the model, restricts what the model can retrieve to what the user is allowed to see, checks what comes out for leaked secrets, and logs every decision.
 
-**Goal:** Provide a controlled AI assistant for enterprise use that prevents sensitive data leakage while maintaining usability.
+> **Status: being rebuilt, and results are being re-measured.**
+> Earlier versions of this README reported figures (test counts, accuracy and detection percentages, latency) that could not be reproduced from this repository, and they have been withdrawn. New results will be published here only as tables generated from files in `results/`, by scripts in this repo. Until then, this README describes what the code does and makes no performance claims.
 
 ## Architecture
 
+Two paths: an **online** path that answers each request, and an **offline** path that prepares data and trains an injection classifier.
+
+### Online — one request
+
 ```
-┌─────────────┐
-│ User Query  │
-└──────┬──────┘
-       ↓
-┌─────────────────────────┐
-│  Input Security Layer   │  • PII Redaction (Presidio)
-│  (validation + redact)  │  • Prompt Injection Detection
-└──────┬──────────────────┘  • Topic Classification
-       ↓
-┌─────────────────────────┐
-│   Access Control Layer  │  • RBAC Permission Check
-│   (RBAC filtering)      │  • User Role Validation
-└──────┬──────────────────┘
-       ↓
-┌─────────────────────────┐
-│   RAG Retrieval Layer   │  • Metadata-Filtered Search
-│   (AstraDB vector DB)   │  • Access Level Enforcement
-└──────┬──────────────────┘
-       ↓
-┌─────────────────────────┐
-│   LLM Generation Layer  │  • Context-Grounded Response
-│   (Ollama/Llama 3.2)    │  • Iterative Rewriting
-└──────┬──────────────────┘
-       ↓
-┌─────────────────────────┐
-│  Output Security Layer  │  • Ensemble Leak Detection:
-│  (leak detection)       │    - Pattern Matching (regex)
-└──────┬──────────────────┘    - Keyword Analysis
-       ↓                        - Semantic Similarity
-┌─────────────────────────┐
-│   Audit & Logging       │  • Full Interaction Logs
-│   (compliance trail)    │  • Security Event Tracking
-└─────────────────────────┘
+Streamlit UI ──► FastAPI POST /chat ──► LangGraph state machine
+                                          │
+   input_security ── blocked? ───────────►│
+        │                                 │
+   controlled_rag                         │
+        │                                 │
+   llm ◄── retry with rewrite instruction │
+        │        (up to 3 retries)        │
+   output_security ───────────────────────┤
+                                          ▼
+                                        audit ──► 200 answer / 403 reason
 ```
 
-## Test Results
+| Node | What it does | Code |
+|---|---|---|
+| `input_security` | Rejects empty, over-length, CSV-formula and symbol-heavy input; substring match against 27 jailbreak phrases (after NFKC Unicode normalisation); classifies the question's sensitivity by similarity to example phrases and checks the user's role may ask it; redacts PII with Microsoft Presidio | `app/security/input_validator.py`, `access_control.py`, `app/redactor.py` |
+| `controlled_rag` | Embeds the redacted query (all-MiniLM-L6-v2) and retrieves the top 2 documents from AstraDB, **filtered inside the vector query** to the access levels the role allows | `app/graph/nodes.py` |
+| `llm` | Answers from the retrieved context with a local Ollama model (`llama3.2:1b`, temperature 0.1) | `app/graph/nodes.py` |
+| `output_security` | Checks the answer against regex patterns and semantic similarity to a catalog of known secrets; on failure, loops back to the LLM with a rewrite instruction, then blocks | `app/security/output_filter.py` |
+| `audit` | Appends one JSON line per request to `security_audit.log` | `app/security/audit_logger.py` |
 
-Evaluated against 160+ adversarial test cases spanning prompt injection, 
-PII leakage, jailbreak attempts, and role-based access violations:
+Roles map to document access levels in `config.py`: `employee` → public, internal · `manager` → + confidential · `executive` → + secret.
 
-| Metric | Score | Details |
-|--------|-------|---------|
-| **Overall Security Score** | 86% | Across all 160+ test cases |
-| **PII Redaction** | 100% | All SSN, emails, credit cards masked |
-| **Input Security** | 100% | All prompt injections blocked (0% FNR) |
-| **Jailbreak Defense** | 72% | Blocked across adversarial prompt variants |
-| **Confidential Leak Reduction** | 92% | Via ensemble output validation |
-| **Leak Detection** | 96% | Semantic + pattern matching ensemble |
-| **RBAC Enforcement** | Passed | Metadata-filtered vector search working |
-| **Response Time** | 8-10s | Bottleneck: Local Ollama inference |
+### Offline — data and model
 
-### Test Case Breakdown
-- Prompt injection variants: direct, indirect, Unicode obfuscation
-- PII leakage attempts: SSN, email, credit card, API key extraction
-- Jailbreak attempts: role-play, instruction override, context manipulation
-- RBAC violations: cross-role document access attempts
-- Synthetic dataset, manually crafted; informed by OWASP LLM Top 10
+| Step | Script |
+|---|---|
+| Load the demo policy documents into AstraDB | `scripts/ingest_data.py` |
+| Load the Enron email corpus into AstraDB, with quality filtering, access levels derived from the sender's role, and resumable batched writes | `scripts/ingest_enron.py` |
+| Build an injection-detection dataset (attacks: Microsoft LLMail-Inject; benign: deepset/prompt-injections + corpus text) and upload it to S3 | `scripts/prepare_finetune_data.py` |
+| Fine-tune `protectai/deberta-v3-base-prompt-injection-v2` on SageMaker (`ml.g4dn.xlarge`), selecting the checkpoint by F2, tracked in Weights & Biases | `scripts/run_sagemaker_job.py` → `training/finetune_train.py` |
+| Evaluate injection detection on external datasets — *`evaluate_injection_detection.py` does not currently run: it imports detector functions missing from `input_validator.py`. Both scripts are being replaced by a held-out evaluation harness.* | `scripts/evaluate_injection_detection.py`, `scripts/evaluate_jailbreakbench.py` |
 
-## Security Layers
+## Known limitations
 
-### 1. Input Security
-- **PII Redaction:** Microsoft Presidio detects and masks SSN, emails, credit cards, phone numbers, API keys
-- **Prompt Injection Defense:** 27 jailbreak patterns + Unicode normalization to detect obfuscation
-- **Topic Classification:** Cosine similarity determines query sensitivity level
+These are tracked, not hidden. Several are the subject of the current rebuild.
 
-### 2. Access Control (RBAC)
-- **Role Permissions:**
-  - Employees: `public` + `internal` documents
-  - Managers: + `confidential` documents
-  - Executives: + `secret` documents
-- **Implementation:** AstraDB metadata filtering on `access_level` field
+**Evaluation**
+- The only committed test set (`tests/data/golden_dataset.json`, 45 cases) was written by the same author as the defenses, so it can't measure how they generalise.
+- There is no end-to-end measurement yet of attack success against the whole system, of over-blocking of legitimate questions, or of latency.
+- The training pipeline has known data-quality issues (benign and attack examples come from different sources, so a classifier can learn the source rather than the attack) and evaluates on data that overlaps its training set.
 
-### 3. Output Validation (Ensemble Approach)
-- **Layer 1:** Regex patterns for structured secrets (passcodes, API keys, salary figures)
-- **Layer 2:** Keyword detection (salary, password, budget, confidential)
-- **Layer 3:** Semantic similarity against secrets catalog (threshold: 0.75)
-- **Decision Logic:** Block if any layer triggers + similarity > 0.65
+**Security**
+- The user's role is supplied by the client in the request body. There is no authentication.
+- Retrieved documents are not scanned for injected instructions before reaching the model, and they are placed in the system prompt.
+- The audit log stores the original, unredacted query.
+- The trained classifier is not yet used at request time.
 
-### 4. Audit & Compliance
-- All interactions logged to AstraDB with user attribution, timestamps, and security decisions
+**Correctness and performance**
+- The keyword layer of the output filter can never trigger, and the dollar-amount pattern also blocks legitimate policy text (e.g. "$500").
+- The `/chat` handler is `async` but runs blocking work, so it doesn't serve requests concurrently.
+- Conversation checkpoints are kept in memory (`MemorySaver`) and lost on restart; Cassandra checkpointing is disabled pending a serialization fix.
+- Documents are not chunked; long emails are truncated at 1500 words, beyond what the embedding model reads (256 tokens).
 
-## Tech Stack
+## Running it
 
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| **Agent Framework** | LangGraph | State machine with conditional routing |
-| **LLM** | Ollama (Llama 3.2 1B) | Local inference, cost-free |
-| **Vector DB** | DataStax AstraDB | Knowledge base + audit logs |
-| **PII Detection** | Microsoft Presidio | Named entity recognition |
-| **Embeddings** | HuggingFace (all-MiniLM-L6-v2) | Semantic similarity |
-| **Backend** | FastAPI | REST API with /chat and /health endpoints |
-| **Frontend** | Streamlit | Interactive demo UI |
-| **Deployment** | Docker Compose | Containerized services |
+**Prerequisites:** Docker, an AstraDB vector database, and [Ollama](https://ollama.com) running on the host with the model pulled:
 
-## Performance Analysis
-
-**Current Bottleneck:** Ollama local inference (8-10s per request)
-
-**Optimization Paths:**
-1. **Model swap:** llama3.2:1b (current) → faster distilled models
-2. **Response streaming:** Server-Sent Events for perceived speed
-3. **Query caching:** Redis for identical/similar queries
-4. **Parallel execution:** Run RAG + PII redaction concurrently
-
-## Metrics & Evaluation
-
-This project includes comprehensive metrics tracking and evaluation:
-
-- **Golden Dataset Testing**: Automated validation against labeled test cases
-- **Performance Benchmarking**: Latency, throughput, and resource usage measurement
-- **Live Metrics API**: Real-time monitoring of security and performance KPIs
-
-**Run Evaluation:**
 ```bash
-python scripts/evaluate_system.py
+ollama pull llama3.2:1b
 ```
 
-**Run Benchmark:**
+**Configure:**
+
 ```bash
-python scripts/benchmark.py
+cp .env.example .env      # then fill in the AstraDB values
 ```
 
-**View Live Metrics:**
+**Load the demo documents** (needs `pip install -r requirements.txt`):
+
 ```bash
-curl http://localhost:8000/metrics
+python scripts/ingest_data.py
 ```
 
-See [METRICS.md](METRICS.md) for detailed metrics documentation and resume-worthy talking points.
+**Start the API and UI:**
+
+```bash
+docker compose up --build
+# API: http://localhost:8000   (GET /health, GET /metrics, POST /chat)
+# UI:  http://localhost:8501
+```
+
+**Tests:**
+
+```bash
+python -m spacy download en_core_web_lg   # Presidio's NER model, needed at import time
+pytest tests/
+```
+
+The offline pipeline needs `pip install -r requirements-train.txt` plus the AWS and W&B values in `.env`. Run the scripts from the repository root.
+
+## Repository layout
+
+```
+app/                FastAPI service, Streamlit UI, LangGraph graph, security layers
+scripts/            ingestion, dataset preparation, SageMaker launcher, evaluators
+training/           SageMaker training entry point and its container requirements
+tests/              pytest suite and golden dataset
+config.py           roles, thresholds, jailbreak phrase list
+secrets_catalog.json  known secrets used by the output filter
+```
 
 ---
 
-**Note**: This is a portfolio project demonstrating AI security concepts. It provides the **technical layer** of an AI governance strategy. Complete enterprise deployment would also require policy enforcement, user training, and network-level access controls.
+This is a portfolio project. It covers the technical layer of AI governance; a real deployment would also need authentication, policy, and network-level controls.

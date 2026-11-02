@@ -60,3 +60,12 @@ htmlcov/
 security_audit.log
 metrics.json
 *.log
+
+# Interview-prep notes (private)
+Firewall_LP_Prep.md
+
+# Pipeline / training artifacts
+data/
+model_output/
+wandb/
+ingest_checkpoint.json

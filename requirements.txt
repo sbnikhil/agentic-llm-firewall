@@ -1,31 +1,27 @@
-groq
-langchain-groq
-langchain-openai
-openai
+# Runtime dependencies for the gateway (app/), tests and scripts/ingest_data.py.
+# Pipeline/training scripts: see requirements-train.txt.
+# SageMaker container: see training/requirements.txt.
 presidio-analyzer
 presidio-anonymizer
 spacy
 langgraph
 langchain
 langchain-community
-numpy
 langchain-astradb
+langchain-huggingface
+langchain-ollama
+langgraph-checkpoint-cassandra
 astrapy
 cassio
-langchain-huggingface
+cassandra-driver
 sentence-transformers
+huggingface_hub
+numpy
 fastapi
 uvicorn
 pydantic>=2.0.0
 python-dotenv
-pytest
-pytest-asyncio
 requests
 streamlit
-langgraph-checkpoint-cassandra
-cassandra-driver
-langchain-huggingface
-huggingface_hub
-langchain-google-genai
-google-generativeai
-langchain-ollama
+pytest
+pytest-asyncio
