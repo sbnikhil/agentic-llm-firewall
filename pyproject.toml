@@ -85,3 +85,9 @@ typeCheckingMode = "basic"
 pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+markers = [
+    "integration: uses the real Presidio/spaCy and MiniLM models (not offline-mocked)",
+]
