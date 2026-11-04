@@ -1,0 +1,87 @@
+[project]
+name = "llmfirewall"
+version = "0.0.0"
+description = "A security checkpoint between people and an AI model."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+# Pinned to the versions resolved in .venv on 2026-11-19 (see docs/baseline.md).
+dependencies = [
+    "astrapy==2.3.2",
+    "en-core-web-lg==3.8.0",
+    "fastapi==0.165.0",
+    "langchain-astradb==1.0.0",
+    "langchain-community==0.4.2",
+    "langchain-huggingface==1.2.3",
+    "langchain-ollama==1.1.0",
+    "langgraph==1.2.23",
+    "numpy==2.4.6",
+    "presidio-analyzer==2.2.366",
+    "presidio-anonymizer==2.2.366",
+    "pydantic==2.14.3",
+    "python-dotenv==1.2.4",
+    "requests==2.34.2",
+    "sentence-transformers==6.3.0",
+    "spacy==3.8.18",
+    "streamlit==1.67.0",
+    # Already installed via sentence-transformers; listed directly only so
+    # [tool.uv.sources] can route it to the CPU-only index on Linux.
+    "torch==2.15.0",
+    "uvicorn==0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "pip-audit==2.10.1",
+    "pre-commit==4.7.0",
+    "pyright==1.1.414",
+    "pytest==9.2.0",
+    "pytest-cov==7.1.0",
+    "ruff==0.17.5",
+]
+
+[tool.uv]
+# No importable llmfirewall package exists yet; don't try to build/install one.
+package = false
+
+[tool.uv.sources]
+en-core-web-lg = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl" }
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+
+# Remaining violations, labelled by how each will be resolved:
+#   legacy      - v0 code that will be frozen under legacy/v0, not fixed
+#   restructure - fixed when the code moves into the engine package
+#   permanent   - intentional, stays ignored
+[tool.ruff.lint.per-file-ignores]
+"app/graph/nodes.py" = ["E501", "F841"]                    # legacy
+"app/graph/workflow.py" = ["E501"]                         # legacy
+"app/main.py" = ["B904", "E501"]                           # legacy
+"app/metrics.py" = ["UP006", "UP035"]                      # legacy
+"app/ui.py" = ["E501", "F841", "S113"]                     # legacy
+"app/security/output_filter.py" = ["UP015"]                # restructure
+"bench/baseline_v0.py" = ["E402", "E501", "S101", "S603"]  # legacy
+"scripts/evaluate_injection_detection.py" = ["E501"]       # legacy
+"scripts/evaluate_jailbreakbench.py" = ["E501", "F541"]    # legacy
+"scripts/evaluate_system.py" = ["UP015"]                   # legacy
+"scripts/ingest_data.py" = ["E501"]                        # legacy
+"scripts/prepare_finetune_data.py" = ["E501", "F541", "F841"]  # legacy
+"scripts/run_sagemaker_job.py" = ["E501"]                  # legacy
+"tests/**" = ["S101"]                                      # permanent: pytest uses assert
+"tests/test_firewall.py" = ["UP015"]                       # legacy
+
+[tool.pyright]
+typeCheckingMode = "basic"
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"

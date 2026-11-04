@@ -3,7 +3,8 @@ __pycache__/
 .env
 .pytest_cache/
 .git/
-*.pycFirewall_LP_Prep.md
+*.pyc
 data/
 model_output/
 wandb/
+.venv/

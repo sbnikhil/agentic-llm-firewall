@@ -20,48 +20,72 @@ Resumable: progress is checkpointed to ingest_checkpoint.json.
 Delete that file to restart from scratch.
 """
 
+import json
+import logging
 import os
 import sys
-import json
 import time
-import logging
 from pathlib import Path
-from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("ingest_enron.log")
-    ]
+    handlers=[logging.StreamHandler(), logging.FileHandler("ingest_enron.log")],
 )
 logger = logging.getLogger(__name__)
 
 CHECKPOINT_FILE = Path("ingest_checkpoint.json")
-BATCH_SIZE = 64          # Embeddings per batch
-ASTRA_BATCH_SIZE = 20    # Documents per AstraDB write (API limit)
-MIN_WORD_COUNT = 30      # Filter out very short emails
+BATCH_SIZE = 64  # Embeddings per batch
+ASTRA_BATCH_SIZE = 20  # Documents per AstraDB write (API limit)
+MIN_WORD_COUNT = 30  # Filter out very short emails
 COLLECTION_NAME = "company_knowledge"
 
 # ── Enron executive roster (well-documented, used for tier labeling) ──────────
 EXECUTIVE_EMAILS = {
-    "kenneth.lay", "ken.lay", "jeffrey.skilling", "jeff.skilling",
-    "andrew.fastow", "andy.fastow", "rebecca.mark", "lou.pai",
-    "richard.causey", "rick.causey", "mark.frevert", "greg.whalley",
-    "john.lavorato", "louise.kitchen", "david.delainey", "ray.bowen",
-    "stanley.horton", "james.derrick", "rex.shelby", "ben.glisan",
-    "michael.kopper", "richard.buy", "sally.beck", "mark.koenig"
+    "kenneth.lay",
+    "ken.lay",
+    "jeffrey.skilling",
+    "jeff.skilling",
+    "andrew.fastow",
+    "andy.fastow",
+    "rebecca.mark",
+    "lou.pai",
+    "richard.causey",
+    "rick.causey",
+    "mark.frevert",
+    "greg.whalley",
+    "john.lavorato",
+    "louise.kitchen",
+    "david.delainey",
+    "ray.bowen",
+    "stanley.horton",
+    "james.derrick",
+    "rex.shelby",
+    "ben.glisan",
+    "michael.kopper",
+    "richard.buy",
+    "sally.beck",
+    "mark.koenig",
 }
 
 MANAGER_KEYWORDS = {
-    "vp", "vice president", "director", "manager", "head", "chief",
-    "president", "supervisor", "lead", "principal", "senior"
+    "vp",
+    "vice president",
+    "director",
+    "manager",
+    "head",
+    "chief",
+    "president",
+    "supervisor",
+    "lead",
+    "principal",
+    "senior",
 }
 
 
@@ -95,17 +119,30 @@ def is_quality_email(text: str, subject: str) -> bool:
         return False
 
     noise_subjects = [
-        "auto:", "automatic reply", "out of office", "ooo:", "vacation",
-        "delivery failure", "undeliverable", "meeting request",
-        "accepted:", "declined:", "tentative:", "fw:", "fwd:"
+        "auto:",
+        "automatic reply",
+        "out of office",
+        "ooo:",
+        "vacation",
+        "delivery failure",
+        "undeliverable",
+        "meeting request",
+        "accepted:",
+        "declined:",
+        "tentative:",
+        "fw:",
+        "fwd:",
     ]
     subject_lower = (subject or "").lower()
     if any(noise in subject_lower for noise in noise_subjects):
         return False
 
     noise_starters = [
-        "this message is a reminder", "please join", "-----original message",
-        "this email and any attachments", "confidentiality notice"
+        "this message is a reminder",
+        "please join",
+        "-----original message",
+        "this email and any attachments",
+        "confidentiality notice",
     ]
     text_lower = text[:100].lower()
     if any(starter in text_lower for starter in noise_starters):
@@ -118,7 +155,12 @@ def load_checkpoint() -> dict:
     if CHECKPOINT_FILE.exists():
         with open(CHECKPOINT_FILE) as f:
             return json.load(f)
-    return {"processed": 0, "ingested": 0, "skipped": 0, "by_level": {"public": 0, "internal": 0, "confidential": 0}}
+    return {
+        "processed": 0,
+        "ingested": 0,
+        "skipped": 0,
+        "by_level": {"public": 0, "internal": 0, "confidential": 0},
+    }
 
 
 def save_checkpoint(state: dict):
@@ -135,13 +177,13 @@ def ingest():
     logger.info("Connecting to AstraDB...")
     try:
         from langchain_astradb import AstraDBVectorStore
-        from langchain_huggingface import HuggingFaceEmbeddings
         from langchain_core.documents import Document
+        from langchain_huggingface import HuggingFaceEmbeddings
 
         embeddings = HuggingFaceEmbeddings(
             model_name="all-MiniLM-L6-v2",
             model_kwargs={"device": "cpu"},
-            encode_kwargs={"batch_size": BATCH_SIZE, "normalize_embeddings": True}
+            encode_kwargs={"batch_size": BATCH_SIZE, "normalize_embeddings": True},
         )
 
         vstore = AstraDBVectorStore(
@@ -160,6 +202,7 @@ def ingest():
     logger.info("This downloads ~500MB on first run and is cached locally after.")
     try:
         from datasets import load_dataset
+
         dataset = load_dataset("corbt/enron-emails", split="train")
         logger.info(f"Dataset loaded: {len(dataset):,} total emails")
     except Exception as e:
@@ -203,8 +246,8 @@ def ingest():
                 "access_level": access_level,
                 "source": "enron_corpus",
                 "sender": sender[:100] if sender else "unknown",
-                "date": row.get("date", "") or ""
-            }
+                "date": row.get("date", "") or "",
+            },
         )
 
         batch.append(doc)
@@ -227,20 +270,24 @@ def ingest():
                     f"Ingested {state['ingested']:,} | "
                     f"Skipped {state['skipped']:,} | "
                     f"Rate {rate:.0f}/s | "
-                    f"ETA {remaining/60:.1f}min | "
+                    f"ETA {remaining / 60:.1f}min | "
                     f"Public {state['by_level']['public']:,} | "
                     f"Internal {state['by_level']['internal']:,} | "
                     f"Confidential {state['by_level']['confidential']:,}"
                 )
             except Exception as e:
-                logger.warning(f"Batch write failed at index {i}: {e}. Retrying after 5s...")
+                logger.warning(
+                    f"Batch write failed at index {i}: {e}. Retrying after 5s..."
+                )
                 time.sleep(5)
                 try:
                     vstore.add_documents(batch)
                     state["ingested"] += len(batch)
                     batch = []
                 except Exception as e2:
-                    logger.error(f"Retry failed: {e2}. Checkpoint saved, restart to resume.")
+                    logger.error(
+                        f"Retry failed: {e2}. Checkpoint saved, restart to resume."
+                    )
                     save_checkpoint(state)
                     sys.exit(1)
 
@@ -261,7 +308,7 @@ def ingest():
     logger.info(f"  public        : {state['by_level']['public']:,}")
     logger.info(f"  internal      : {state['by_level']['internal']:,}")
     logger.info(f"  confidential  : {state['by_level']['confidential']:,}")
-    logger.info(f"Time elapsed    : {elapsed/60:.1f} minutes")
+    logger.info(f"Time elapsed    : {elapsed / 60:.1f} minutes")
     logger.info(f"Collection      : {COLLECTION_NAME} in AstraDB")
     logger.info("=" * 60)
 

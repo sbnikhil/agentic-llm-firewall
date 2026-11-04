@@ -1,6 +1,6 @@
-import random
 import csv
 import os
+import random
 import sys
 import time
 from pathlib import Path
@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 BUCKET = os.getenv("S3_BUCKET", "llm-firewall")
@@ -21,6 +22,7 @@ random.seed(RANDOM_SEED)
 def load_positives():
     """LLMail-Inject Phase1 body — real email-format injection attempts."""
     from datasets import load_dataset
+
     print("Loading LLMail-Inject Phase1 (positives)...")
     ds = load_dataset("microsoft/llmail-inject-challenge", split="Phase1")
     bodies = list(set(row["body"] for row in ds if row.get("body", "").strip()))
@@ -41,15 +43,17 @@ def load_negatives(target_count: int):
       - These are exactly what the model sees at inference time
       - More realistic negatives = better training signal
     """
-    from datasets import load_dataset
     from astrapy import DataAPIClient
+    from datasets import load_dataset
 
     negatives = []
 
     # Source 1: deepset legitimate queries (short, query-style text)
     print("Loading deepset negatives (train split)...")
     ds_deepset = load_dataset("deepset/prompt-injections", split="train")
-    deepset_neg = [row["text"] for row in ds_deepset if row["label"] == 0 and row["text"].strip()]
+    deepset_neg = [
+        row["text"] for row in ds_deepset if row["label"] == 0 and row["text"].strip()
+    ]
     negatives.extend(deepset_neg)
     print(f"  deepset label=0: {len(deepset_neg):,}")
 
@@ -86,7 +90,9 @@ def load_negatives(target_count: int):
                 break  # success — exit retry loop
             except Exception as e:
                 retries += 1
-                print(f"  AstraDB read interrupted ({e}), retry {retries}/{max_retries}...")
+                print(
+                    f"  AstraDB read interrupted ({e}), retry {retries}/{max_retries}..."
+                )
                 time.sleep(5)
 
         negatives.extend(astra_docs)
@@ -95,9 +101,11 @@ def load_negatives(target_count: int):
         print(f"  AstraDB query failed: {e}")
         print("  Falling back to HuggingFace Enron dataset...")
         from datasets import load_dataset as lds
+
         ds_enron = lds("corbt/enron-emails", split="train")
         enron_bodies = [
-            row["body"] for row in ds_enron
+            row["body"]
+            for row in ds_enron
             if row.get("body", "").strip() and len(row["body"].split()) >= 30
         ]
         enron_sample = random.sample(enron_bodies, min(needed, len(enron_bodies)))
@@ -110,15 +118,14 @@ def load_negatives(target_count: int):
 
 def build_dataset(positives, negatives):
     """Combine, shuffle, split 80/20."""
-    data = (
-        [{"text": t, "label": 1} for t in positives] +
-        [{"text": t, "label": 0} for t in negatives]
-    )
+    data = [{"text": t, "label": 1} for t in positives] + [
+        {"text": t, "label": 0} for t in negatives
+    ]
     random.shuffle(data)
 
     split = int(len(data) * 0.8)
     train = data[:split]
-    val   = data[split:]
+    val = data[split:]
     print(f"\nDataset split:")
     print(f"  Train : {len(train):,}")
     print(f"  Val   : {len(val):,}")
@@ -134,6 +141,7 @@ def save_csv(data, path):
 
 def upload_to_s3(local_path, s3_key):
     import boto3
+
     s3 = boto3.client("s3")
     print(f"Uploading {local_path} → s3://{BUCKET}/{s3_key}")
     s3.upload_file(str(local_path), BUCKET, s3_key)
@@ -154,9 +162,9 @@ def main():
     data_dir.mkdir(parents=True, exist_ok=True)
 
     train_path = data_dir / "train.csv"
-    val_path   = data_dir / "val.csv"
+    val_path = data_dir / "val.csv"
     save_csv(train, train_path)
-    save_csv(val,   val_path)
+    save_csv(val, val_path)
     print(f"\nSaved locally:")
     print(f"  {train_path}")
     print(f"  {val_path}")
@@ -164,7 +172,7 @@ def main():
     # Upload to S3
     print()
     upload_to_s3(train_path, f"{S3_PREFIX}/train.csv")
-    upload_to_s3(val_path,   f"{S3_PREFIX}/val.csv")
+    upload_to_s3(val_path, f"{S3_PREFIX}/val.csv")
 
     print(f"\nData ready at s3://{BUCKET}/{S3_PREFIX}/")
     print("Next: python scripts/run_sagemaker_job.py")

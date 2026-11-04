@@ -1,34 +1,30 @@
-from config import SecurityConfig
-from sentence_transformers import SentenceTransformer
 import numpy as np
+from sentence_transformers import SentenceTransformer
 
-model = SentenceTransformer('all-MiniLM-L6-v2')
+from config import SecurityConfig
+
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
 TOPIC_EXAMPLES = {
     "public": [
         "remote work policy",
         "office hours",
         "company benefits",
-        "vacation policy"
+        "vacation policy",
     ],
     "internal": [
         "project timelines",
         "team structure",
         "equipment requests",
-        "expense approval"
+        "expense approval",
     ],
     "confidential": [
         "budget information",
         "financial data",
         "strategic plans",
-        "executive decisions"
+        "executive decisions",
     ],
-    "secret": [
-        "passwords",
-        "access codes",
-        "api keys",
-        "credentials"
-    ]
+    "secret": ["passwords", "access codes", "api keys", "credentials"],
 }
 
 topic_embeddings = {
@@ -36,17 +32,19 @@ topic_embeddings = {
     for level, examples in TOPIC_EXAMPLES.items()
 }
 
+
 def classify_query_sensitivity(query: str) -> str:
     query_embedding = model.encode(query)
-    
+
     scores = {}
     for level, embeddings in topic_embeddings.items():
         similarities = [
-            np.dot(query_embedding, emb) / (np.linalg.norm(query_embedding) * np.linalg.norm(emb))
+            np.dot(query_embedding, emb)
+            / (np.linalg.norm(query_embedding) * np.linalg.norm(emb))
             for emb in embeddings
         ]
         scores[level] = max(similarities)
-    
+
     if scores["secret"] > 0.7:
         return "secret"
     elif scores["confidential"] > 0.65:
@@ -56,9 +54,11 @@ def classify_query_sensitivity(query: str) -> str:
     else:
         return "public"
 
+
 def has_permission(user_role: str, topic_level: str) -> bool:
     allowed_levels = SecurityConfig.ROLE_PERMISSIONS.get(user_role, ["public"])
     return topic_level in allowed_levels
+
 
 def get_allowed_collections(user_role: str) -> list[str]:
     allowed_levels = SecurityConfig.ROLE_PERMISSIONS.get(user_role, ["public"])

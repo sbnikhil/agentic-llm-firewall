@@ -2,15 +2,9 @@ class SecurityConfig:
     LEAK_THRESHOLD = 0.75  # Lowered from 0.80 to catch more paraphrased leaks
     MAX_REWRITE_ATTEMPTS = 3
     RAG_TOP_K = 2
-    
-    REDACT_ENTITIES = [
-        "PERSON", 
-        "LOCATION", 
-        "EMAIL_ADDRESS", 
-        "PHONE_NUMBER", 
-        "API_KEY"
-    ]
-    
+
+    REDACT_ENTITIES = ["PERSON", "LOCATION", "EMAIL_ADDRESS", "PHONE_NUMBER", "API_KEY"]
+
     JAILBREAK_PATTERNS = [
         "ignore previous instructions",
         "ignore all previous instructions",
@@ -38,19 +32,19 @@ class SecurityConfig:
         "let's think",
         "security disabled",
         "bypass all restrictions",
-        "role play"
+        "role play",
     ]
-    
+
     RATE_LIMIT_QUERIES_PER_MINUTE = 10
-    
+
     ROLE_PERMISSIONS = {
         "employee": ["public", "internal"],
         "manager": ["public", "internal", "confidential"],
-        "executive": ["public", "internal", "confidential", "secret"]
+        "executive": ["public", "internal", "confidential", "secret"],
     }
-    
+
     COLLECTION_NAMES = {
         "public": "company_knowledge",
         "internal": "company_knowledge",
-        "confidential": "company_knowledge"
+        "confidential": "company_knowledge",
     }

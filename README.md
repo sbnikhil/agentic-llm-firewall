@@ -56,10 +56,10 @@ ollama pull llama3.2:1b
 cp .env.example .env      # then fill in the AstraDB values
 ```
 
-**Load the demo documents** (needs `pip install -r requirements.txt`):
+**Load the demo documents** (needs `uv sync`):
 
 ```bash
-python scripts/ingest_data.py
+uv run python scripts/ingest_data.py
 ```
 
 **Start the API and UI:**
@@ -73,11 +73,11 @@ docker compose up --build
 **Tests:**
 
 ```bash
-python -m spacy download en_core_web_lg   # Presidio's NER model, needed at import time
-pytest tests/
+uv sync          # installs dependencies from uv.lock, including Presidio's spaCy model
+uv run pytest
 ```
 
-The offline pipeline needs `pip install -r requirements-train.txt` plus the AWS and W&B values in `.env`. Run the scripts from the repository root.
+The offline pipeline scripts are being retired and their dependencies are not installed by `uv sync`; they also need the AWS and W&B values in `.env`. Run the scripts from the repository root.
 
 ## Repository layout
 

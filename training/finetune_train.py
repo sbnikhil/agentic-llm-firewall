@@ -13,50 +13,58 @@ Do NOT run this locally — it is meant to run inside the SageMaker
 HuggingFace training container.
 """
 
-import os
 import argparse
-import pandas as pd
-import numpy as np
+import os
 from pathlib import Path
-import wandb
 
-from transformers import (
-    AutoTokenizer,
-    AutoModelForSequenceClassification,
-    TrainingArguments,
-    Trainer,
-    EarlyStoppingCallback,
-)
-from datasets import Dataset
+import numpy as np
+import pandas as pd
 import torch
+import wandb
+from datasets import Dataset
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    EarlyStoppingCallback,
+    Trainer,
+    TrainingArguments,
+)
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name",    default="ProtectAI/deberta-v3-base-prompt-injection-v2")
-    parser.add_argument("--epochs",        type=int,   default=3)
-    parser.add_argument("--batch_size",    type=int,   default=16)
+    parser.add_argument(
+        "--model_name", default="ProtectAI/deberta-v3-base-prompt-injection-v2"
+    )
+    parser.add_argument("--epochs", type=int, default=3)
+    parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--learning_rate", type=float, default=2e-5)
-    parser.add_argument("--max_length",    type=int,   default=256)
+    parser.add_argument("--max_length", type=int, default=256)
     # SageMaker injects these
-    parser.add_argument("--train",     default=os.environ.get("SM_CHANNEL_TRAIN", "data/finetune"))
-    parser.add_argument("--val",       default=os.environ.get("SM_CHANNEL_VAL",   "data/finetune"))
-    parser.add_argument("--model_dir", default=os.environ.get("SM_MODEL_DIR",     "model_output"))
+    parser.add_argument(
+        "--train", default=os.environ.get("SM_CHANNEL_TRAIN", "data/finetune")
+    )
+    parser.add_argument(
+        "--val", default=os.environ.get("SM_CHANNEL_VAL", "data/finetune")
+    )
+    parser.add_argument(
+        "--model_dir", default=os.environ.get("SM_MODEL_DIR", "model_output")
+    )
     return parser.parse_args()
 
 
 def load_data(train_dir, val_dir):
     train_df = pd.read_csv(Path(train_dir) / "train.csv").dropna()
-    val_df   = pd.read_csv(Path(val_dir)   / "val.csv").dropna()
+    val_df = pd.read_csv(Path(val_dir) / "val.csv").dropna()
 
     # Reset index — Dataset.from_pandas() adds __index_level_0__ if index is
     # not reset, which causes the Trainer to error on unexpected input columns.
     train_df = train_df.reset_index(drop=True)
-    val_df   = val_df.reset_index(drop=True)
+    val_df = val_df.reset_index(drop=True)
 
     # Truncate very long texts to keep memory usage predictable
     train_df["text"] = train_df["text"].str[:1024]
-    val_df["text"]   = val_df["text"].str[:1024]
+    val_df["text"] = val_df["text"].str[:1024]
 
     print(f"Train size : {len(train_df):,}  (pos={train_df['label'].sum():,})")
     print(f"Val size   : {len(val_df):,}  (pos={val_df['label'].sum():,})")
@@ -84,20 +92,26 @@ def compute_metrics(eval_pred):
     fn = ((predictions == 0) & (labels == 1)).sum()
     tn = ((predictions == 0) & (labels == 0)).sum()
 
-    precision   = tp / (tp + fp) if (tp + fp) > 0 else 0
-    recall      = tp / (tp + fn) if (tp + fn) > 0 else 0
-    f1          = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-    f2          = 5 * precision * recall / (4 * precision + recall) if (4 * precision + recall) > 0 else 0
-    fpr         = fp / (fp + tn) if (fp + tn) > 0 else 0
-    accuracy    = (tp + tn) / len(labels)
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    f1 = (
+        2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+    )
+    f2 = (
+        5 * precision * recall / (4 * precision + recall)
+        if (4 * precision + recall) > 0
+        else 0
+    )
+    fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
+    accuracy = (tp + tn) / len(labels)
 
     return {
-        "accuracy":  round(accuracy,  4),
+        "accuracy": round(accuracy, 4),
         "precision": round(precision, 4),
-        "recall":    round(recall,    4),
-        "f1":        round(f1,        4),
-        "f2":        round(f2,        4),
-        "fpr":       round(fpr,       4),
+        "recall": round(recall, 4),
+        "f1": round(f1, 4),
+        "f2": round(f2, 4),
+        "fpr": round(fpr, 4),
     }
 
 
@@ -109,13 +123,13 @@ def main():
     wandb.init(
         project=os.environ.get("WANDB_PROJECT", "llm-firewall-injection-detection"),
         config={
-            "model":         args.model_name,
-            "epochs":        args.epochs,
-            "batch_size":    args.batch_size,
+            "model": args.model_name,
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
             "learning_rate": args.learning_rate,
-            "max_length":    args.max_length,
-            "dataset":       "LLMail-Inject-Phase1 + AstraDB-Enron",
-        }
+            "max_length": args.max_length,
+            "dataset": "LLMail-Inject-Phase1 + AstraDB-Enron",
+        },
     )
 
     # Load data
@@ -131,9 +145,9 @@ def main():
 
     # Tokenize
     train_tok = tokenize(train_ds, tokenizer, args.max_length)
-    val_tok   = tokenize(val_ds,   tokenizer, args.max_length)
+    val_tok = tokenize(val_ds, tokenizer, args.max_length)
     train_tok = train_tok.rename_column("label", "labels")
-    val_tok   = val_tok.rename_column("label", "labels")
+    val_tok = val_tok.rename_column("label", "labels")
     train_tok.set_format("torch")
     val_tok.set_format("torch")
 

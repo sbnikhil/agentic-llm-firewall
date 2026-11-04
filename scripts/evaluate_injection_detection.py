@@ -22,22 +22,21 @@ Usage:
     python scripts/evaluate_injection_detection.py
 """
 
-import sys
 import json
 import random
+import sys
 from pathlib import Path
-from collections import defaultdict
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from datasets import load_dataset
+
 from app.security.input_validator import (
-    detect_jailbreak_patterns,
-    detect_csv_injection,
     contains_excessive_special_chars,
-    detect_jailbreak_ml,
-    validate_input,
+    detect_csv_injection,
+    detect_jailbreak_patterns,
     scan_retrieved_document,
+    validate_input,
 )
 
 LLMAIL_SAMPLE_SIZE = 300
@@ -57,7 +56,9 @@ def load_direct_injection_data():
 
 def load_indirect_injection_data():
     """LLMail-Inject Phase1 — real email-format indirect injection attacks."""
-    print(f"Loading microsoft/llmail-inject-challenge (Phase1, sampling {LLMAIL_SAMPLE_SIZE})...")
+    print(
+        f"Loading microsoft/llmail-inject-challenge (Phase1, sampling {LLMAIL_SAMPLE_SIZE})..."
+    )
     ds = load_dataset("microsoft/llmail-inject-challenge", split="Phase1")
 
     random.seed(RANDOM_SEED)
@@ -162,14 +163,14 @@ def print_section(title, dataset_source, results, missed):
     print(f"{'=' * 62}")
 
     for layer, label in [
-        ("pattern_only",   "Layer 1 — Pattern matching only    "),
-        ("pattern_plus_ml","Layer 2 — Pattern + ML (DeBERTa)   "),
+        ("pattern_only", "Layer 1 — Pattern matching only    "),
+        ("pattern_plus_ml", "Layer 2 — Pattern + ML (DeBERTa)   "),
     ]:
         r = results[layer]
         total_attacks = r["tp"] + r["fn"]
-        total_benign  = r["fp"] + r["tn"]
-        dr  = r["tp"] / total_attacks * 100 if total_attacks > 0 else 0
-        fpr = r["fp"] / total_benign  * 100 if total_benign  > 0 else 0
+        total_benign = r["fp"] + r["tn"]
+        dr = r["tp"] / total_attacks * 100 if total_attacks > 0 else 0
+        fpr = r["fp"] / total_benign * 100 if total_benign > 0 else 0
         print(f"\n  {label}")
         print(f"    Detection rate : {r['tp']}/{total_attacks} = {dr:.1f}%")
         print(f"    False pos rate : {r['fp']}/{total_benign}  = {fpr:.1f}%")
@@ -177,16 +178,16 @@ def print_section(title, dataset_source, results, missed):
     p = results["pattern_only"]
     m = results["pattern_plus_ml"]
     total_attacks = p["tp"] + p["fn"]
-    total_benign  = p["fp"] + p["tn"]
-    dr_gain  = (m["tp"] - p["tp"]) / total_attacks * 100 if total_attacks > 0 else 0
-    fpr_delta = (m["fp"] - p["fp"]) / total_benign  * 100 if total_benign  > 0 else 0
+    total_benign = p["fp"] + p["tn"]
+    dr_gain = (m["tp"] - p["tp"]) / total_attacks * 100 if total_attacks > 0 else 0
+    fpr_delta = (m["fp"] - p["fp"]) / total_benign * 100 if total_benign > 0 else 0
 
     print(f"\n  ML layer gain  : detection +{dr_gain:.1f}%  |  FPR {fpr_delta:+.1f}%")
 
     if missed:
         print(f"\n  Missed by both layers ({len(missed)} examples):")
         for ex in missed[:3]:
-            print(f"    \"{ex}\"")
+            print(f'    "{ex}"')
 
 
 def main():
@@ -200,8 +201,12 @@ def main():
     print()
 
     # Evaluate
-    direct_results, direct_missed = evaluate_direct_injection(direct_attacks, legitimate)
-    indirect_results, indirect_missed = evaluate_indirect_injection(indirect_attacks, legitimate)
+    direct_results, direct_missed = evaluate_direct_injection(
+        direct_attacks, legitimate
+    )
+    indirect_results, indirect_missed = evaluate_indirect_injection(
+        indirect_attacks, legitimate
+    )
 
     # Report
     print_section(
@@ -222,10 +227,14 @@ def main():
     # Save
     output_path = Path(__file__).parent.parent / "evaluation_results_injection.json"
     with open(output_path, "w") as f:
-        json.dump({
-            "direct_injection": direct_results,
-            "indirect_injection": indirect_results,
-        }, f, indent=2)
+        json.dump(
+            {
+                "direct_injection": direct_results,
+                "indirect_injection": indirect_results,
+            },
+            f,
+            indent=2,
+        )
     print(f"  Results saved to: {output_path}\n")
 
 

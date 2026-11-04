@@ -1,8 +1,13 @@
 FROM python:3.12-slim
+COPY --from=ghcr.io/astral-sh/uv:0.13.9 /uv /bin/uv
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-RUN python -m spacy download en_core_web_lg
+# Venv lives outside /app so the `.:/app` bind mount in docker-compose.yml cannot hide it.
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/opt/venv
+# Install dependencies first so this layer is cached when only code changes.
+# uv.lock includes the spaCy model, so no separate `spacy download` step.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
 COPY . .
+ENV PATH="/opt/venv/bin:$PATH"
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

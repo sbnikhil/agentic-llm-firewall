@@ -1,0 +1,2 @@
+# Synthetic test value: a made-up API key in a redaction test case, never a real credential.
+1ee6b21b3cb83028c6a8eca72a8090ce7e641400:tests/data/golden_dataset.json:generic-api-key:22

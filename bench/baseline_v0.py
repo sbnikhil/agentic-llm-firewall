@@ -139,7 +139,9 @@ def cold():
         for i in range(COLD_RUNS):
             r = subprocess.run(
                 [sys.executable, __file__, "--cold-child", c, str(i)],
-                capture_output=True, text=True, check=True,
+                capture_output=True,
+                text=True,
+                check=True,
             )
             ms.append(json.loads(r.stdout.strip().splitlines()[-1])["ms"])
         out[c] = summary(ms)
@@ -150,9 +152,20 @@ def environment():
     torch = force_cpu()
     from importlib.metadata import version
 
-    pkgs = ["presidio-analyzer", "presidio-anonymizer", "spacy", "en-core-web-lg",
-            "sentence-transformers", "transformers", "torch", "numpy", "langchain",
-            "langgraph", "fastapi", "pytest"]
+    pkgs = [
+        "presidio-analyzer",
+        "presidio-anonymizer",
+        "spacy",
+        "en-core-web-lg",
+        "sentence-transformers",
+        "transformers",
+        "torch",
+        "numpy",
+        "langchain",
+        "langgraph",
+        "fastapi",
+        "pytest",
+    ]
     return {
         "python": platform.python_version(),
         "platform": platform.platform(),
@@ -170,4 +183,6 @@ if __name__ == "__main__":
     if len(sys.argv) == 4 and sys.argv[1] == "--cold-child":
         cold_child(sys.argv[2], int(sys.argv[3]))
     else:
-        print(json.dumps({"env": environment(), "warm": warm(), "cold": cold()}, indent=2))
+        print(
+            json.dumps({"env": environment(), "warm": warm(), "cold": cold()}, indent=2)
+        )

@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.13.9"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  lint:
+    name: ruff lint and format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  pyright:
+    name: pyright error count
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Fail if pyright errors exceed .pyright-baseline
+        run: |
+          # pyright exits 1 when it finds errors (expected here); >1 means it crashed.
+          set +e
+          uv run pyright --outputjson > pyright.json
+          rc=$?
+          set -e
+          if [ "$rc" -gt 1 ]; then echo "pyright failed with exit $rc"; exit "$rc"; fi
+          uv run python scripts/check_pyright_count.py < pyright.json
+
+  test:
+    name: pytest (Python 3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Install dependencies (timed)
+        run: |
+          start=$(date +%s)
+          uv sync --locked
+          echo "uv sync took $(( $(date +%s) - start ))s" | tee -a "$GITHUB_STEP_SUMMARY"
+      # The spaCy model is a locked dependency, so the uv cache covers it.
+      # Hugging Face models (MiniLM) are cached here.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/huggingface
+          key: hf-models-all-MiniLM-L6-v2-v1
+      - run: uv run pytest
+
+  pip-audit:
+    name: pip-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Audit every locked package
+        run: |
+          # en-core-web-lg is a GitHub-release URL dependency, not on PyPI, so it
+          # has no advisory data and pip-audit cannot pin it; it is excluded.
+          uv export --frozen --all-groups --no-emit-project \
+            --no-emit-package en-core-web-lg \
+            --format requirements-txt -o audit-requirements.txt
+          uv run pip-audit --disable-pip --strict --progress-spinner off \
+            -r audit-requirements.txt
+
+  gitleaks:
+    name: gitleaks (full history)
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks (checksum-verified)
+        run: |
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSLO "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
+          echo "${GITLEAKS_SHA256}  ${tarball}" | sha256sum --check
+          tar -xzf "${tarball}" gitleaks
+      - name: Scan git history (allowlist in .gitleaksignore)
+        run: ./gitleaks git . --redact --no-banner --verbose
+
+  docker:
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build -t llmfirewall:ci .
