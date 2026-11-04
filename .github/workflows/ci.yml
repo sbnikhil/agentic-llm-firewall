@@ -86,10 +86,14 @@ jobs:
         run: |
           # en-core-web-lg is a GitHub-release URL dependency, not on PyPI, so it
           # has no advisory data and pip-audit cannot pin it; it is excluded.
-          uv export --frozen --all-groups --no-emit-project \
+          uv export --frozen --all-groups --no-emit-project --no-hashes \
             --no-emit-package en-core-web-lg \
             --format requirements-txt -o audit-requirements.txt
-          uv run pip-audit --disable-pip --strict --progress-spinner off \
+          # On Linux, torch comes from PyTorch's CPU index as 2.15.0+cpu, a local
+          # version PyPI doesn't list. Audit it under its upstream version, which
+          # is the same source release, so advisories still apply.
+          sed -i 's/^torch==\([0-9.]*\)+cpu/torch==\1/' audit-requirements.txt
+          uv run pip-audit --disable-pip --no-deps --strict --progress-spinner off \
             -r audit-requirements.txt
 
   gitleaks:
