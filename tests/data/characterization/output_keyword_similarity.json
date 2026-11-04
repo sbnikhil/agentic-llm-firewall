@@ -1,0 +1,29 @@
+[
+  {
+    "id": "keyword-salary-0.72",
+    "text": "The CEO salary is set by the board each year.",
+    "source": "written for rule: output_filter keyword + similarity > 0.65 branch",
+    "keyword": "salary",
+    "nearest_catalog_type": "executive_salary",
+    "observed_max_similarity": 0.722,
+    "today": {"passed": true, "reason": "Passed", "score": 0.0}
+  },
+  {
+    "id": "keyword-password-0.68",
+    "text": "The WiFi password is posted in the break room.",
+    "source": "written for rule: output_filter keyword + similarity > 0.65 branch",
+    "keyword": "password",
+    "nearest_catalog_type": "wifi_password",
+    "observed_max_similarity": 0.676,
+    "today": {"passed": true, "reason": "Passed", "score": 0.0}
+  },
+  {
+    "id": "keyword-budget-0.68",
+    "text": "Our R&D spending budget grew this year.",
+    "source": "written for rule: output_filter keyword + similarity > 0.65 branch",
+    "keyword": "budget",
+    "nearest_catalog_type": "budget",
+    "observed_max_similarity": 0.680,
+    "today": {"passed": true, "reason": "Passed", "score": 0.0}
+  }
+]

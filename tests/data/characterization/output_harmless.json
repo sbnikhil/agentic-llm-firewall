@@ -1,0 +1,86 @@
+[
+  {
+    "id": "email-help-desk",
+    "text": "You can reach the IT help desk at helpdesk@example.com.",
+    "source": "written for rule: SECRET_PATTERNS 'email'",
+    "today": {"passed": false, "reason": "Blocked: Pattern detected: email", "score": 1.0},
+    "redact_pii_today": "You can reach the IT help desk at <EMAIL_ADDRESS>."
+  },
+  {
+    "id": "email-events",
+    "text": "Send questions about the event to events@example.org.",
+    "source": "written for rule: SECRET_PATTERNS 'email'",
+    "today": {"passed": false, "reason": "Blocked: Pattern detected: email", "score": 1.0},
+    "redact_pii_today": "Send questions about the event to <EMAIL_ADDRESS>."
+  },
+  {
+    "id": "phone-visitor-center",
+    "text": "The visitor center number is 800-555-0100.",
+    "source": "written for rule: SECRET_PATTERNS 'phone'",
+    "today": {"passed": false, "reason": "Blocked: Pattern detected: phone", "score": 1.0},
+    "redact_pii_today": "The visitor center number is <PHONE_NUMBER>."
+  },
+  {
+    "id": "phone-opening-hours",
+    "text": "For opening hours, call 555-010-0199.",
+    "source": "written for rule: SECRET_PATTERNS 'phone'",
+    "today": {"passed": false, "reason": "Blocked: Pattern detected: phone", "score": 1.0},
+    "redact_pii_today": "For opening hours, call <PHONE_NUMBER>."
+  },
+  {
+    "id": "dollar-museum-ticket",
+    "text": "A museum ticket costs $15.",
+    "source": "written for rule: SECRET_PATTERNS 'salary'",
+    "today": {"passed": false, "reason": "Blocked: Pattern detected: salary", "score": 1.0},
+    "redact_pii_today": "A museum ticket costs $15."
+  },
+  {
+    "id": "dollar-paperback",
+    "text": "A standard paperback costs about $12.99.",
+    "source": "written for rule: SECRET_PATTERNS 'salary'",
+    "today": {"passed": false, "reason": "Blocked: Pattern detected: salary", "score": 1.0},
+    "redact_pii_today": "A standard paperback costs about $12.99."
+  },
+  {
+    "id": "nine-digit-tracking",
+    "text": "Your package tracking number is 123456789.",
+    "source": "written for rule: SECRET_PATTERNS 'ssn'",
+    "today": {"passed": false, "reason": "Blocked: Pattern detected: ssn", "score": 1.0},
+    "redact_pii_today": "Your package tracking number is <US_SSN>."
+  },
+  {
+    "id": "nine-digit-order",
+    "text": "The order reference is 987654321.",
+    "source": "written for rule: SECRET_PATTERNS 'ssn'",
+    "today": {"passed": false, "reason": "Blocked: Pattern detected: ssn", "score": 1.0},
+    "redact_pii_today": "The order reference is <US_SSN>."
+  },
+  {
+    "id": "plain-office-hours",
+    "text": "The office opens at 9 a.m. on weekdays.",
+    "source": "written for rule: validate_output (no pattern, no keyword)",
+    "today": {"passed": true, "reason": "Passed", "score": 0.0},
+    "redact_pii_today": "The office opens at 9 a.m. on weekdays."
+  },
+  {
+    "id": "plain-capital",
+    "text": "Paris is the capital of France.",
+    "source": "written for rule: validate_output (no pattern, no keyword)",
+    "today": {"passed": true, "reason": "Passed", "score": 0.0},
+    "redact_pii_today": "<LOCATION> is the capital of <LOCATION>."
+  },
+  {
+    "id": "plain-laptop",
+    "text": "You can request a new laptop through the IT portal.",
+    "source": "written for rule: validate_output (no pattern, no keyword)",
+    "today": {"passed": true, "reason": "Passed", "score": 0.0},
+    "redact_pii_today": "You can request a new laptop through the IT portal."
+  },
+  {
+    "id": "plain-llm-error-fallback",
+    "text": "I'm having trouble processing your request right now. Please try again later.",
+    "source": "written for rule: validate_output; same text as the llm_node error fallback in app/graph/nodes.py",
+    "today": {"passed": true, "reason": "Passed", "score": 0.0},
+    "redact_pii_today": "I'm having trouble processing your request right now. Please try again later."
+  }
+]

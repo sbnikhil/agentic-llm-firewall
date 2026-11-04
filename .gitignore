@@ -62,7 +62,7 @@ metrics.json
 *.log
 
 # Pipeline / training artifacts
-data/
+/data/
 model_output/
 wandb/
 ingest_checkpoint.json
