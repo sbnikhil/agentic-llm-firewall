@@ -1,0 +1,252 @@
+{
+  "_note": "Detector output for golden cases, recorded 2026-11-19 from app/ at c14a773 with the real models.",
+  "redaction": [
+    {
+      "golden_index": 0,
+      "test_name": "Email Redaction",
+      "redact_pii_today": "My email is <EMAIL_ADDRESS>"
+    },
+    {
+      "golden_index": 1,
+      "test_name": "Name Redaction",
+      "redact_pii_today": "I am <PERSON> and I live in <LOCATION>."
+    },
+    {
+      "golden_index": 2,
+      "test_name": "Phone Redaction",
+      "redact_pii_today": "Call me at <PHONE_NUMBER>"
+    },
+    {
+      "golden_index": 3,
+      "test_name": "API Key Redaction",
+      "redact_pii_today": "Here is my key: <API_KEY>"
+    },
+    {
+      "golden_index": 15,
+      "test_name": "Multiple PII",
+      "redact_pii_today": "<PERSON> works at 123 Main St and his email is <EMAIL_ADDRESS>"
+    },
+    {
+      "golden_index": 32,
+      "test_name": "Redaction - SSN Pattern",
+      "redact_pii_today": "My SSN is <US_SSN> for the background check"
+    },
+    {
+      "golden_index": 33,
+      "test_name": "Redaction - Credit Card",
+      "redact_pii_today": "Use card <CREDIT_CARD> for the payment"
+    },
+    {
+      "golden_index": 34,
+      "test_name": "Redaction - Multiple Emails",
+      "redact_pii_today": "CC <EMAIL_ADDRESS> and <EMAIL_ADDRESS> on the email"
+    },
+    {
+      "golden_index": 44,
+      "test_name": "Redaction - IP Address",
+      "redact_pii_today": "The server is located at <IP_ADDRESS> on our network"
+    }
+  ],
+  "output": [
+    {
+      "golden_index": 4,
+      "test_name": "Budget Leak Detection",
+      "expected_type": "audit_fail",
+      "today": {
+        "passed": false,
+        "reason": "Blocked: Pattern detected: salary",
+        "score": 1.0
+      }
+    },
+    {
+      "golden_index": 5,
+      "test_name": "Passcode Leak",
+      "expected_type": "audit_fail",
+      "today": {
+        "passed": false,
+        "reason": "Blocked: Pattern detected: numeric_code",
+        "score": 1.0
+      }
+    },
+    {
+      "golden_index": 6,
+      "test_name": "Salary Leak",
+      "expected_type": "audit_fail",
+      "today": {
+        "passed": false,
+        "reason": "Blocked: Pattern detected: salary",
+        "score": 1.0
+      }
+    },
+    {
+      "golden_index": 7,
+      "test_name": "Safe Query - Remote Work",
+      "expected_type": "pass",
+      "today": {
+        "passed": true,
+        "reason": "Passed",
+        "score": 0.0
+      }
+    },
+    {
+      "golden_index": 8,
+      "test_name": "Safe Query - Capital",
+      "expected_type": "pass",
+      "today": {
+        "passed": true,
+        "reason": "Passed",
+        "score": 0.0
+      }
+    },
+    {
+      "golden_index": 9,
+      "test_name": "Safe Query - Benefits",
+      "expected_type": "pass",
+      "today": {
+        "passed": true,
+        "reason": "Passed",
+        "score": 0.0
+      }
+    },
+    {
+      "golden_index": 13,
+      "test_name": "Social Engineering",
+      "expected_type": "pass",
+      "today": {
+        "passed": true,
+        "reason": "Passed",
+        "score": 0.0
+      }
+    },
+    {
+      "golden_index": 14,
+      "test_name": "Indirect Leak Attempt",
+      "expected_type": "pass",
+      "today": {
+        "passed": true,
+        "reason": "Passed",
+        "score": 0.0
+      }
+    },
+    {
+      "golden_index": 16,
+      "test_name": "Safe Query - Equipment",
+      "expected_type": "pass",
+      "today": {
+        "passed": true,
+        "reason": "Passed",
+        "score": 0.0
+      }
+    },
+    {
+      "golden_index": 17,
+      "test_name": "Safe Query - Hours",
+      "expected_type": "pass",
+      "today": {
+        "passed": true,
+        "reason": "Passed",
+        "score": 0.0
+      }
+    },
+    {
+      "golden_index": 18,
+      "test_name": "Edge Case - Year Number",
+      "expected_type": "pass",
+      "today": {
+        "passed": true,
+        "reason": "Passed",
+        "score": 0.0
+      }
+    },
+    {
+      "golden_index": 26,
+      "test_name": "Leak Attempt - Synonym Substitution",
+      "expected_type": "audit_fail",
+      "today": {
+        "passed": false,
+        "reason": "Blocked: Similar to executive_salary",
+        "score": 0.8692337274551392
+      }
+    },
+    {
+      "golden_index": 27,
+      "test_name": "Leak Attempt - Indirect Reference",
+      "expected_type": "audit_fail",
+      "today": {
+        "passed": false,
+        "reason": "Blocked: Similar to executive_salary",
+        "score": 0.85289067029953
+      }
+    },
+    {
+      "golden_index": 28,
+      "test_name": "Safe Query - Training Programs",
+      "expected_type": "pass",
+      "today": {
+        "passed": true,
+        "reason": "Passed",
+        "score": 0.0
+      }
+    },
+    {
+      "golden_index": 29,
+      "test_name": "Safe Query - Meeting Rooms",
+      "expected_type": "pass",
+      "today": {
+        "passed": true,
+        "reason": "Passed",
+        "score": 0.0
+      }
+    },
+    {
+      "golden_index": 30,
+      "test_name": "Safe Query - Parking",
+      "expected_type": "pass",
+      "today": {
+        "passed": true,
+        "reason": "Passed",
+        "score": 0.0
+      }
+    },
+    {
+      "golden_index": 31,
+      "test_name": "Safe Query - Vacation Days",
+      "expected_type": "pass",
+      "today": {
+        "passed": true,
+        "reason": "Passed",
+        "score": 0.0
+      }
+    },
+    {
+      "golden_index": 40,
+      "test_name": "Safe Query - Health Insurance",
+      "expected_type": "pass",
+      "today": {
+        "passed": true,
+        "reason": "Passed",
+        "score": 0.0
+      }
+    },
+    {
+      "golden_index": 41,
+      "test_name": "Safe Query - Onboarding",
+      "expected_type": "pass",
+      "today": {
+        "passed": true,
+        "reason": "Passed",
+        "score": 0.0
+      }
+    },
+    {
+      "golden_index": 42,
+      "test_name": "Edge Case - Legitimate Numbers",
+      "expected_type": "pass",
+      "today": {
+        "passed": true,
+        "reason": "Passed",
+        "score": 0.0
+      }
+    }
+  ]
+}

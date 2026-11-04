@@ -1,4 +1,4 @@
-"""Characterization tests for app.security.input_validator.validate_input.
+"""Characterization tests for llmfirewall.engine.detectors.input_rules.validate_input.
 
 They pin what the input check does today, so a later restructure can be
 shown not to change it. Known problems are recorded as strict xfails that
@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from app.security.input_validator import validate_input
+from llmfirewall.engine.detectors.input_rules import validate_input
 from tests.characterization_data import ids, load_data
 
 GOLDEN = load_data("golden_dataset.json")
@@ -69,7 +69,7 @@ def test_harmless_phrase_is_blocked_today(item: dict[str, Any]) -> None:
 )
 def test_clearly_harmless_phrase_should_be_allowed(item: dict[str, Any]) -> None:
     valid, _reason = validate_input(item["text"], "employee")
-    assert valid is True
+    assert valid
 
 
 @pytest.mark.parametrize("item", ALLOWED_TODAY, ids=ids(ALLOWED_TODAY))

@@ -10,6 +10,8 @@ from typing import Any
 import numpy as np
 import pytest
 
+from llmfirewall.engine import models
+from llmfirewall.engine.settings import get_settings
 from tests.characterization_data import ids, load_data
 
 pytestmark = pytest.mark.integration
@@ -25,15 +27,15 @@ SIMILARITY_TOLERANCE = 0.01
 
 @pytest.fixture(scope="module")
 def output_filter() -> Any:
-    import app.security.output_filter as module
+    from llmfirewall.engine.detectors import output_filter as module
 
-    assert type(module.model).__name__ == "SentenceTransformer"
+    assert type(models.sentence_transformer()).__name__ == "SentenceTransformer"
     return module
 
 
 @pytest.fixture(scope="module")
 def redactor() -> Any:
-    import app.redactor as module
+    from llmfirewall.engine.detectors import pii as module
 
     return module
 
@@ -42,10 +44,11 @@ def max_catalog_similarity(output_filter: Any, text: str) -> tuple[float, str]:
     """Best cosine similarity of `text` against secrets_catalog.json, computed
     the same way check_semantic_similarity does, but returning the score even
     when it is below LEAK_THRESHOLD."""
-    response = output_filter.model.encode(text)
+    model = models.sentence_transformer()
+    response = model.encode(text)
     best, best_type = -1.0, ""
-    for entry in output_filter.load_secrets_catalog():
-        secret = output_filter.model.encode(entry["text"])
+    for entry in models.load_secrets_catalog():
+        secret = model.encode(entry["text"])
         sim = float(
             np.dot(response, secret)
             / (np.linalg.norm(response) * np.linalg.norm(secret))
@@ -75,7 +78,7 @@ def test_plain_harmless_answer_passes_today(
     output_filter: Any, item: dict[str, Any]
 ) -> None:
     similarity, _ = max_catalog_similarity(output_filter, item["text"])
-    assert similarity <= output_filter.SecurityConfig.LEAK_THRESHOLD
+    assert similarity <= get_settings().leak_threshold
     assert output_filter.validate_output(item["text"]) == (True, "Passed", 0.0)
 
 
@@ -95,7 +98,7 @@ def test_keyword_with_similarity_in_dead_window_passes_today(
     )
     # Inside the window where the keyword-plus-similarity branch was meant
     # to block: above 0.65, at or below LEAK_THRESHOLD.
-    assert 0.65 < similarity <= output_filter.SecurityConfig.LEAK_THRESHOLD
+    assert 0.65 < similarity <= get_settings().leak_threshold
     assert output_filter.check_keyword_presence(text)[0] is True
     assert output_filter.validate_output(text) == (True, "Passed", 0.0)
 

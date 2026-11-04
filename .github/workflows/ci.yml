@@ -73,8 +73,6 @@ jobs:
         run: uv run pytest tests/unit
       - name: Integration tests (real Presidio and MiniLM)
         run: uv run pytest tests/integration -m integration
-      - name: Legacy golden-dataset tests
-        run: uv run pytest tests/test_firewall.py
 
   pip-audit:
     name: pip-audit

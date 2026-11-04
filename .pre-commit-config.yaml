@@ -12,4 +12,4 @@ repos:
     rev: v6.0.0
     hooks:
       - id: end-of-file-fixer
-        exclude: ^tests/data/ # golden/eval data is never rewritten by tooling
+        exclude: ^(tests/data/|legacy/) # golden/eval data and frozen legacy code are never rewritten by tooling

@@ -1,4 +1,5 @@
-"""Characterization tests for app.security.output_filter.validate_output.
+"""Characterization tests for validate_output in
+llmfirewall.engine.detectors.output_filter.
 
 Runs offline: the `output_filter` fixture (tests/unit/conftest.py) imports the
 module with a fake SentenceTransformer whose vectors the test chooses.
@@ -53,14 +54,14 @@ def test_harmless_answer_with_pattern_should_not_be_blocked(
     # Checks only the block decision; the answer text is deliberately not
     # compared, so redacting the value instead of blocking counts as correct.
     passed, _reason, _score = output_filter.validate_output(item["text"])
-    assert passed is True
+    assert passed
 
 
 @pytest.mark.parametrize("item", PASSED_TODAY, ids=ids(PASSED_TODAY))
 def test_plain_harmless_answer_passes_today(
-    output_filter: Any, item: dict[str, Any]
+    output_filter: Any, fake_model: Any, item: dict[str, Any]
 ) -> None:
-    output_filter.model.vectors[item["text"]] = np.array([0.0, 1.0, 0.0])
+    fake_model.vectors[item["text"]] = np.array([0.0, 1.0, 0.0])
     assert output_filter.validate_output(item["text"]) == (True, "Passed", 0.0)
 
 
@@ -72,7 +73,7 @@ def test_plain_harmless_answer_passes_today(
 
 @pytest.mark.parametrize("item", KEYWORD_SIM, ids=ids(KEYWORD_SIM))
 def test_keyword_with_similarity_0_70_passes_today(
-    output_filter: Any, item: dict[str, Any]
+    output_filter: Any, fake_model: Any, item: dict[str, Any]
 ) -> None:
     text = item["text"]
     assert output_filter.check_keyword_presence(text) == (
@@ -80,15 +81,15 @@ def test_keyword_with_similarity_0_70_passes_today(
         f"Sensitive keyword: {item['keyword']}",
     )
     assert output_filter.check_pattern_match(text) == (False, "")
-    output_filter.model.vectors[text] = unit_vector_with_similarity(0.70)
+    fake_model.vectors[text] = unit_vector_with_similarity(0.70)
 
     assert output_filter.check_semantic_similarity(text) == (False, "", 0.0)
     assert output_filter.validate_output(text) == (True, "Passed", 0.0)
 
 
-def test_similarity_0_80_blocks_today(output_filter: Any) -> None:
+def test_similarity_0_80_blocks_today(output_filter: Any, fake_model: Any) -> None:
     text = "The CEO salary is set by the board each year."
-    output_filter.model.vectors[text] = unit_vector_with_similarity(0.80)
+    fake_model.vectors[text] = unit_vector_with_similarity(0.80)
 
     passed, reason, score = output_filter.validate_output(text)
 
@@ -98,8 +99,8 @@ def test_similarity_0_80_blocks_today(output_filter: Any) -> None:
     assert score == pytest.approx(0.80)
 
 
-def test_keyword_alone_passes_today(output_filter: Any) -> None:
+def test_keyword_alone_passes_today(output_filter: Any, fake_model: Any) -> None:
     text = "The CEO salary is set by the board each year."
-    output_filter.model.vectors[text] = np.array([0.0, 1.0, 0.0])
+    fake_model.vectors[text] = np.array([0.0, 1.0, 0.0])
 
     assert output_filter.validate_output(text) == (True, "Passed", 0.0)

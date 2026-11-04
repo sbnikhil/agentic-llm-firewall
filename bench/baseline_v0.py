@@ -1,24 +1,32 @@
-"""Baseline ("before") latency for the v0 firewall components.
+"""Latency of the three firewall checks, now run against llmfirewall.engine.
 
-Times three functions directly (not the LangGraph nodes):
-  input_check  = app.security.input_validator.validate_input(text, "employee")
-  pii_redact   = app.redactor.redact_pii(text)
-  output_filter= app.security.output_filter.validate_output(text)
+The "before" numbers in docs/baseline.md came from the v0 version of this
+script (see it at commit 9311a98), which timed the v0 app (app.security.*,
+app.redactor). It now times the same functions moved into the engine:
+  input_check  = llmfirewall.engine.detectors.input_rules.validate_input(text, "employee")
+  pii_redact   = llmfirewall.engine.detectors.pii.redact_pii(text)
+  output_filter= llmfirewall.engine.detectors.output_filter.validate_output(text)
+
+v0 loaded models when a module was imported; the engine loads them on first
+use. To keep "load" meaning the same thing, load() below calls the model
+loaders explicitly, so it does the work that importing v0 did. The secrets
+catalog embeddings are computed on the first validate_output call (in v0,
+every call re-encoded them).
 
 Inputs: every "input" string in tests/data/golden_dataset.json (n=45). The
 output filter is fed these user inputs, not model answers.
 
 Two measurements:
-  warm  - one process; import (models load), one discarded warm-up call per
+  warm  - one process; load (models load), one discarded warm-up call per
           component, then PASSES passes over all 45 strings. Model loading excluded.
   cold  - COLD_RUNS fresh subprocesses per component; each times
-          import (incl. model load) + the first call. Model loading included.
+          import + model load + the first call. Model loading included.
           Python interpreter startup itself is not included.
 
 All torch work is forced onto CPU: before output_filter is imported, the
 SentenceTransformer constructor it uses is wrapped to pass device="cpu"
 (otherwise it picks MPS on Apple silicon), and the model's device is asserted.
-No app code is modified.
+No engine code is modified.
 Hugging Face is put in offline mode so loading is read from the local cache.
 
 Usage (from repo root):  .venv/bin/python bench/baseline_v0.py
@@ -45,15 +53,15 @@ COMPONENTS = ("input_check", "pii_redact", "output_filter")
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
-os.chdir(REPO)  # app code reads some files by relative path
+os.chdir(REPO)  # same working directory as the v0 run
 sys.path.insert(0, str(REPO))
 
 
 def force_cpu():
-    """Make app code's `SentenceTransformer(name)` behave as `SentenceTransformer(name, device="cpu")`.
+    """Make the engine's `SentenceTransformer(name)` behave as `SentenceTransformer(name, device="cpu")`.
 
-    output_filter.py does `from sentence_transformers import SentenceTransformer`
-    at import time, so this must run before that import.
+    models.sentence_transformer() does `from sentence_transformers import
+    SentenceTransformer` when first called, so this must run before that call.
     """
     import functools
 
@@ -68,22 +76,26 @@ def force_cpu():
 
 
 def load(component):
-    """Import a component (this is where its models load) and return its callable."""
+    """Import a component, load its models, and return its callable."""
     if component == "input_check":
-        from app.security.input_validator import validate_input
+        from llmfirewall.engine.detectors.input_rules import validate_input
 
         return lambda t: validate_input(t, "employee")
     if component == "pii_redact":
-        from app.redactor import redact_pii
+        from llmfirewall.engine import models
+        from llmfirewall.engine.detectors.pii import redact_pii
 
+        models.presidio_analyzer()
+        models.presidio_anonymizer()
         return redact_pii
     if component == "output_filter":
         force_cpu()
-        from app.security import output_filter
+        from llmfirewall.engine import models
+        from llmfirewall.engine.detectors.output_filter import validate_output
 
-        dev = str(output_filter.model.device)
+        dev = str(models.sentence_transformer().device)
         assert dev == "cpu", f"model on {dev}, expected cpu"
-        return output_filter.validate_output
+        return validate_output
     raise ValueError(component)
 
 
@@ -148,9 +160,17 @@ def cold():
     return out
 
 
+def installed_version(package):
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version(package)
+    except PackageNotFoundError:
+        return "not installed"
+
+
 def environment():
     torch = force_cpu()
-    from importlib.metadata import version
 
     pkgs = [
         "presidio-analyzer",
@@ -172,7 +192,7 @@ def environment():
         "torch_device": "cpu (SentenceTransformer device='cpu', CUDA hidden)",
         "mps_available_but_unused": torch.backends.mps.is_available(),
         "torch_num_threads": torch.get_num_threads(),
-        "packages": {p: version(p) for p in pkgs},
+        "packages": {p: installed_version(p) for p in pkgs},
         "n_inputs": len(inputs()),
         "passes": PASSES,
         "cold_runs": COLD_RUNS,

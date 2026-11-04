@@ -60,7 +60,7 @@ Other notes:
 
 ## Latency ("before")
 
-Script: [`bench/baseline_v0.py`](../bench/baseline_v0.py), run as `.venv/bin/python bench/baseline_v0.py`.
+Script: [`bench/baseline_v0.py` at `9311a98`](https://github.com/sbnikhil/agentic-llm-firewall/blob/9311a98/bench/baseline_v0.py) (the v0 version; the current file times the engine, see [After load-once](#after-load-once)), run as `.venv/bin/python bench/baseline_v0.py`.
 
 It times each function directly, not the LangGraph nodes:
 
@@ -104,6 +104,58 @@ One process. The script imports each component (models load during import), make
 - **The input check is pure Python string matching**, a few microseconds per call. Its cold cost is mostly importing `config`.
 - **Cold start is about 4–5 s each for PII redaction and the output filter**, almost all of it model loading (spaCy `en_core_web_lg`, and torch plus MiniLM). A process that loads both pays roughly the sum, because these benchmarks measured them in separate processes.
 - One run on one machine. Treat these numbers as a reference point, not a benchmark result with error bars.
+
+## After load-once
+
+Recorded 2026-11-19 on `main` (working tree on top of `c14a773`), after the three checks moved into `llmfirewall.engine` (`detectors/input_rules.py`, `detectors/pii.py`, `detectors/output_filter.py`). It uses the same machine, the same inputs (n = 45), the same method and the same CPU-only setting as above. The command is unchanged: `.venv/bin/python bench/baseline_v0.py`. The script now calls the engine functions.
+
+What changed in the code being timed:
+- **The secrets catalog is encoded once per process**, not on every call (`models.secrets_catalog_embeddings()`). Each `validate_output` call that reaches the similarity step now encodes only the answer: 1 encoder pass instead of 28.
+- **Models load on first use, not at import.** One `SentenceTransformer` is shared, and the Presidio analyzer and anonymizer are cached. The benchmark's `load()` now calls these loaders explicitly, so "load" covers the same work that importing a v0 module did.
+
+Detector results are unchanged. The characterization suites give the same results before and after (unit: 79 passed, 13 xfailed; integration: 57 passed).
+
+Package versions for everything the checks use are the same as in the appendix: presidio 2.2.366, spaCy 3.8.18, en-core-web-lg 3.8.0, sentence-transformers 6.3.0, transformers 5.23.0, torch 2.15.0, numpy 2.4.6. Torch threads: 4.
+
+### Model loading excluded (warm), before → after
+
+| Component | p50 before (ms) | p50 after (ms) | p95 before (ms) | p95 after (ms) | mean before (ms) | mean after (ms) | max before (ms) | max after (ms) |
+|---|---|---|---|---|---|---|---|---|
+| input check | 0.003 | 0.003 | 0.004 | 0.004 | 0.003 | 0.002 | 0.039 | 0.013 |
+| PII redaction | 3.292 | 3.117 | 4.768 | 4.464 | 3.564 | 3.364 | 23.741 | 18.370 |
+| output filter | 212.922 | **7.252** | 269.226 | **17.942** | 189.417 | **8.800** | 1068.430 | 281.158 |
+
+Full "after" rows (n = 225 each):
+
+| Component | n | p50 (ms) | p95 (ms) | mean (ms) | min (ms) | max (ms) |
+|---|---|---|---|---|---|---|
+| input check | 225 | 0.003 | 0.004 | 0.002 | 0.000 | 0.013 |
+| PII redaction | 225 | 3.117 | 4.464 | 3.364 | 2.351 | 18.370 |
+| output filter | 225 | 7.252 | 17.942 | 8.800 | 0.002 | 281.158 |
+
+### Model loading included (cold), before → after
+
+| Component | p50 before (ms) | p50 after (ms) | p95 before (ms) | p95 after (ms) | mean before (ms) | mean after (ms) |
+|---|---|---|---|---|---|---|
+| input check | 15.917 | 115.866 | 20.844 | 134.903 | 16.771 | 118.497 |
+| PII redaction | 4937.445 | 4687.274 | 5571.165 | 5090.765 | 5001.982 | 4753.422 |
+| output filter | 4425.977 | 4597.588 | 4733.645 | 5573.459 | 4463.584 | 4737.235 |
+
+Full "after" rows (n = 10 each):
+
+| Component | n | p50 (ms) | p95 (ms) | mean (ms) | min (ms) | max (ms) |
+|---|---|---|---|---|---|---|
+| input check | 10 | 115.866 | 134.903 | 118.497 | 111.665 | 148.035 |
+| PII redaction | 10 | 4687.274 | 5090.765 | 4753.422 | 4620.981 | 5348.286 |
+| output filter | 10 | 4597.588 | 5573.459 | 4737.235 | 4400.112 | 6173.442 |
+
+### Reading the numbers
+
+- **Warm output-filter p50 fell from about 213 ms to about 7 ms (about 29 times faster), and p95 from 269 ms to 18 ms.** This is the expected effect of no longer re-encoding the 27 catalog entries on every call.
+- **The 281 ms warm output-filter maximum is most likely the one-time catalog encoding.** The discarded warm-up call uses the first golden input (`My email is …`). That input matches the email regex and returns before the similarity step, so the catalog is first encoded during a timed call. I did not change the benchmark method to hide this, and the p50 and p95 are not affected.
+- **Cold input check rose from about 16 ms to about 116 ms.** The v0 input check imported a plain `config.py`. The engine's version imports `llmfirewall.engine.settings`, which imports pydantic-settings and pydantic. That is import cost only; the warm per-call time is unchanged.
+- **Cold PII redaction and cold output filter are about the same as before** (about 4.6–4.7 s p50), because they are dominated by loading spaCy `en_core_web_lg` and torch plus MiniLM. The cold output filter still encodes the whole catalog once, on its first call, as v0 did. The differences between the two runs are within run-to-run noise for 10 samples. Load-once helps a long-running process, not a single cold call.
+- This is one run on one machine, as with the "before" numbers.
 
 ## Appendix: `uv pip freeze` (.venv, 2026-11-19)
 

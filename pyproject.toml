@@ -19,6 +19,7 @@ dependencies = [
     "presidio-analyzer==2.2.366",
     "presidio-anonymizer==2.2.366",
     "pydantic==2.14.3",
+    "pydantic-settings==2.16.3",
     "python-dotenv==1.2.4",
     "requests==2.34.2",
     "sentence-transformers==6.3.0",
@@ -40,9 +41,12 @@ dev = [
     "ruff==0.17.5",
 ]
 
+[build-system]
+requires = ["uv_build>=0.13.9,<0.14"]
+build-backend = "uv_build"
+
 [tool.uv]
-# No importable llmfirewall package exists yet; don't try to build/install one.
-package = false
+package = true
 
 [tool.uv.sources]
 en-core-web-lg = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl" }
@@ -55,6 +59,8 @@ explicit = true
 
 [tool.ruff]
 target-version = "py312"
+# The frozen v0 app is kept as-is and not linted (docs/decisions/0001-retire-v0-app.md).
+extend-exclude = ["legacy"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "S"]
@@ -64,30 +70,19 @@ select = ["E", "F", "I", "B", "UP", "S"]
 #   restructure - fixed when the code moves into the engine package
 #   permanent   - intentional, stays ignored
 [tool.ruff.lint.per-file-ignores]
-"app/graph/nodes.py" = ["E501", "F841"]                    # legacy
-"app/graph/workflow.py" = ["E501"]                         # legacy
-"app/main.py" = ["B904", "E501"]                           # legacy
-"app/metrics.py" = ["UP006", "UP035"]                      # legacy
-"app/ui.py" = ["E501", "F841", "S113"]                     # legacy
-"app/security/output_filter.py" = ["UP015"]                # restructure
 "bench/baseline_v0.py" = ["E402", "E501", "S101", "S603"]  # legacy
-"scripts/evaluate_injection_detection.py" = ["E501"]       # legacy
-"scripts/evaluate_jailbreakbench.py" = ["E501", "F541"]    # legacy
-"scripts/evaluate_system.py" = ["UP015"]                   # legacy
-"scripts/ingest_data.py" = ["E501"]                        # legacy
-"scripts/prepare_finetune_data.py" = ["E501", "F541", "F841"]  # legacy
-"scripts/run_sagemaker_job.py" = ["E501"]                  # legacy
 "tests/**" = ["S101"]                                      # permanent: pytest uses assert
-"tests/test_firewall.py" = ["UP015"]                       # legacy
 
 [tool.pyright]
 typeCheckingMode = "basic"
 pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"
+exclude = ["legacy", "**/__pycache__", "**/.*"]
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers"
+testpaths = ["tests"]
 markers = [
     "integration: uses the real Presidio/spaCy and MiniLM models (not offline-mocked)",
 ]

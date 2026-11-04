@@ -2,6 +2,8 @@
 
 A security gateway for an enterprise RAG assistant. It screens what goes into the model, restricts what the model can retrieve to what the user is allowed to see, checks what comes out for leaked secrets, and logs every decision.
 
+> **Note:** the v0 app described below (FastAPI, Streamlit, LangGraph, AstraDB, the ingestion and training scripts) is now frozen in [`legacy/v0/`](legacy/v0/) and is no longer run, tested in CI or built into the Docker image. Its detection code now lives in `src/llmfirewall/engine/`. Paths below refer to `legacy/v0/` unless noted. See [docs/decisions/0001-retire-v0-app.md](docs/decisions/0001-retire-v0-app.md).
+
 ## Architecture
 
 Two paths: an **online** path that answers each request, and an **offline** path that prepares data and trains an injection classifier.
@@ -82,12 +84,12 @@ The offline pipeline scripts are being retired and their dependencies are not in
 ## Repository layout
 
 ```
-app/                FastAPI service, Streamlit UI, LangGraph graph, security layers
-scripts/            ingestion, dataset preparation, SageMaker launcher, evaluators
-training/           SageMaker training entry point and its container requirements
-tests/              pytest suite and golden dataset
-config.py           roles, thresholds, jailbreak phrase list
-secrets_catalog.json  known secrets used by the output filter
+src/llmfirewall/engine/  detection library: settings, models (load once), detectors/
+bench/                   latency benchmark
+tests/                   unit (offline) and integration (real models) tests, test data
+docs/                    baseline, v0 findings, roadmap, decisions/
+secrets_catalog.json     known secrets used by the output filter
+legacy/v0/               the frozen v0 app: app/, scripts/, training/, config.py, compose file
 ```
 
 ---

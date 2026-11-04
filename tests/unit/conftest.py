@@ -8,7 +8,6 @@ Unit tests must never load a real model or touch the network:
   file write lands there.
 """
 
-import importlib
 import socket
 import sys
 import types
@@ -19,7 +18,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-import app.security as security_pkg
+from llmfirewall.engine import models
 
 HEAVY_MODULES = (
     "sentence_transformers",
@@ -67,28 +66,28 @@ class FakeSentenceTransformer:
 
 @pytest.fixture
 def output_filter(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
-    """A fresh import of app.security.output_filter backed by the fake model.
+    """llmfirewall.engine.detectors.output_filter backed by the fake model.
 
-    The real module (if an integration test already imported it) is put back
-    afterwards, so tests in other directories still see the real model.
+    The engine's model caches are cleared before and after, so the fake is
+    created fresh for this test and never leaks into other tests.
     """
     fake_module = types.ModuleType("sentence_transformers")
     setattr(fake_module, "SentenceTransformer", FakeSentenceTransformer)  # noqa: B010
     monkeypatch.setitem(sys.modules, "sentence_transformers", fake_module)
 
-    name = "app.security.output_filter"
-    saved_module = sys.modules.pop(name, None)
-    had_attr = hasattr(security_pkg, "output_filter")
-    saved_attr = getattr(security_pkg, "output_filter", None)
+    from llmfirewall.engine.detectors import output_filter as module
+
+    models.clear_caches()
     try:
-        module = importlib.import_module(name)
-        assert isinstance(module.model, FakeSentenceTransformer)
+        assert isinstance(models.sentence_transformer(), FakeSentenceTransformer)
         yield module
     finally:
-        sys.modules.pop(name, None)
-        if saved_module is not None:
-            sys.modules[name] = saved_module
-        if had_attr:
-            setattr(security_pkg, "output_filter", saved_attr)  # noqa: B010
-        elif hasattr(security_pkg, "output_filter"):
-            delattr(security_pkg, "output_filter")
+        models.clear_caches()
+
+
+@pytest.fixture
+def fake_model(output_filter: Any) -> FakeSentenceTransformer:
+    """The fake SentenceTransformer the output_filter fixture installed."""
+    model = models.sentence_transformer()
+    assert isinstance(model, FakeSentenceTransformer)
+    return model
