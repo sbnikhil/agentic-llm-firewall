@@ -1,0 +1,42 @@
+# Default policy: applies to every caller without an identity mapping.
+# Matches v0's behavior, so the evaluation baseline measures v0 truthfully.
+# Changes come later, from measurement (docs/design/policy.md section 8).
+version: 1
+
+# A firewall that lets traffic through when it breaks is not a firewall
+# (docs/decisions/0002-fail-closed.md).
+on_detector_error: fail_closed
+on_timeout: fail_closed
+
+# UNMEASURED PLACEHOLDER. The real budget comes from the latency task.
+# Reference only: warm p95s are input_rules 0.004 ms, pii 4.5 ms,
+# output_leak 18 ms (docs/baseline.md), and pii runs once per message.
+latency_budget_ms: 1000
+
+detectors:
+  # User messages only. System and developer messages are unchecked: the
+  # system prompt is written by the application holding the key, and the
+  # phrase rules would block ordinary system prompts ("act as if"). Tool
+  # output is unchecked because the special-character ratio blocks JSON.
+  # Known limitation, see docs/design/policy.md section 10.
+  input_rules:
+    enabled: true
+    action: block
+    apply_to: [user]
+
+  # Same as v0: redact personal data instead of blocking. min_score 0.0 and
+  # all entities (the default) match what redact_pii acts on today.
+  pii:
+    enabled: true
+    action: redact
+    apply_to: [user, response]
+    params:
+      min_score: 0.0
+
+  # Same as v0: block answers that look like a leak. This also blocks any
+  # answer containing an email or phone number (pinned by the
+  # characterization tests).
+  output_leak:
+    enabled: true
+    action: block
+    apply_to: [response]

@@ -1,0 +1,35 @@
+# Strict policy: checks every role a client can write, and keeps personal
+# data out in both directions.
+version: 1
+
+on_detector_error: fail_closed
+on_timeout: fail_closed
+
+# UNMEASURED PLACEHOLDER, as in default.yaml.
+latency_budget_ms: 1000
+
+detectors:
+  # Every role a client writes. Assistant is included because a client can
+  # fabricate earlier assistant turns; tool and function because tool output
+  # carries indirect injection. Not system or developer: the application
+  # writes those, and the phrase rules would block ordinary system prompts.
+  # Known limitation, see docs/design/policy.md section 10.
+  input_rules:
+    enabled: true
+    action: block
+    apply_to: [user, assistant, tool, function]
+
+  # Redact, not block: redaction already stops personal data passing in
+  # either direction, while block with min_score 0.0 would reject a request
+  # over any low-confidence Presidio match, such as a date.
+  pii:
+    enabled: true
+    action: redact
+    apply_to: [system, developer, user, assistant, tool, function, response]
+    params:
+      min_score: 0.0
+
+  output_leak:
+    enabled: true
+    action: block
+    apply_to: [response]

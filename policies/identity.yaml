@@ -1,0 +1,9 @@
+# Server-side mapping from LiteLLM-verified identity to a policy name.
+# Only UserAPIKeyAuth.user_id and .team_id are used, never request content,
+# metadata or headers (docs/design/policy.md section 3).
+# If both the user and the team are mapped, the caller gets the stricter
+# merge of the two policies, so neither mapping can weaken the other.
+version: 1
+default: default
+users: {}
+teams: {}

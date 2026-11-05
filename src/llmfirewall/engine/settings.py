@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     keyword_similarity_threshold: float = 0.65
     secrets_catalog_path: Path = REPO_ROOT / "secrets_catalog.json"
 
+    # Policies (docs/design/policy.md)
+    policies_dir: Path = REPO_ROOT / "policies"
+    identity_map_path: Path = REPO_ROOT / "policies" / "identity.yaml"
+
 
 @cache
 def get_settings() -> Settings:
