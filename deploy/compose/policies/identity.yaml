@@ -1,0 +1,12 @@
+# Identity map for the compose stack only (dev and e2e). The shipped
+# policies/identity.yaml is unchanged.
+#
+# Team ids are created at startup by bootstrap/bootstrap.py through
+# LiteLLM's API. Users are not mapped: alice and bob get their team's policy.
+# Callers with no team (including the master key, user_id "default_user_id")
+# get the default policy.
+version: 1
+default: default
+teams:
+  team-standard: default
+  team-strict: strict

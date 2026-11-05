@@ -124,3 +124,52 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: docker build -t llmfirewall:ci .
+
+  e2e:
+    name: e2e (deploy/compose + tests/e2e)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Create .env with random values (masked)
+        working-directory: deploy/compose
+        run: |
+          umask 077
+          master="sk-$(openssl rand -hex 24)"
+          pg="$(openssl rand -hex 24)"
+          hmac="$(openssl rand -hex 32)"
+          alice="sk-$(openssl rand -hex 24)"
+          bob="sk-$(openssl rand -hex 24)"
+          for v in "$master" "$pg" "$hmac" "$alice" "$bob"; do echo "::add-mask::$v"; done
+          {
+            echo "LITELLM_MASTER_KEY=$master"
+            echo "POSTGRES_PASSWORD=$pg"
+            echo "LLMFW_AUDIT_HMAC_KEY=$hmac"
+            echo "LLMFW_DEV_ALICE_KEY=$alice"
+            echo "LLMFW_DEV_BOB_KEY=$bob"
+          } > .env
+      - name: Start the stack (with the test-only fake provider credentials)
+        working-directory: deploy/compose
+        run: >-
+          docker compose -f docker-compose.yml -f docker-compose.e2e.yml
+          up -d --build --wait --wait-timeout 900
+      - name: e2e tests
+        run: |
+          set -a; . deploy/compose/.env; set +a
+          LLMFW_E2E_BASE_URL=http://127.0.0.1:4000 uv run pytest tests/e2e -m e2e -rs
+      - name: Stack logs on failure
+        if: failure()
+        working-directory: deploy/compose
+        run: >-
+          docker compose -f docker-compose.yml -f docker-compose.e2e.yml
+          logs --no-color --tail 300
+      - name: Stop the stack
+        if: always()
+        working-directory: deploy/compose
+        run: docker compose -f docker-compose.yml -f docker-compose.e2e.yml down -v

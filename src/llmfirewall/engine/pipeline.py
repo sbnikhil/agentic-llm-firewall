@@ -71,6 +71,9 @@ class PipelineResult:
     findings: list[Finding]
     failures: list[DetectorFailure]
     skipped: list[str]
+    # Total time per detector across all segments, including detectors
+    # that found nothing. For the audit log only; no decision reads it.
+    durations_ms: dict[str, float] = field(default_factory=dict)
 
 
 def _valid_hits(hits: object, text: str) -> list[Hit]:
@@ -94,6 +97,7 @@ def run_pipeline(
     findings: list[Finding] = []
     failures: list[DetectorFailure] = []
     skipped: list[str] = []
+    durations_ms: dict[str, float] = {}
     fail_closed_on_error = policy.on_detector_error is FailureMode.FAIL_CLOSED
     fail_closed_on_timeout = policy.on_timeout is FailureMode.FAIL_CLOSED
 
@@ -125,6 +129,9 @@ def run_pipeline(
             except Exception as e:  # any detector bug is handled by policy
                 failure, error_type = "error", type(e).__name__
             finished = clock()
+            durations_ms[detector.name] = durations_ms.get(detector.name, 0.0) + max(
+                0.0, (finished - started) * 1000
+            )
 
             if failure is not None:
                 failures.append(
@@ -172,4 +179,4 @@ def run_pipeline(
                 timed_out = True
                 break
 
-    return PipelineResult(verdict.action, findings, failures, skipped)
+    return PipelineResult(verdict.action, findings, failures, skipped, durations_ms)

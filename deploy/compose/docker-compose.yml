@@ -1,0 +1,139 @@
+# LiteLLM proxy + Postgres + the firewall guardrail, with a mocked upstream.
+#
+#   cp .env.example .env    # then set real values
+#   docker compose up -d --build --wait
+#
+# Optional: a local Ollama model instead of the mock (README.md).
+name: llmfirewall
+
+# No bind mounts: config and scripts are copied into images, so the stack
+# works wherever Docker cannot read the checkout (for example macOS folders
+# Docker Desktop has no permission for) and in CI.
+
+services:
+  postgres:
+    image: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_DB: litellm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  litellm:
+    image: llmfirewall-proxy:dev
+    build:
+      context: ../..
+      dockerfile: deploy/compose/proxy/Dockerfile
+    command: ["--config", "/etc/litellm/config.yaml", "--port", "4000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock-upstream:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://litellm:${POSTGRES_PASSWORD}@postgres:5432/litellm
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY in .env}
+      UPSTREAM_MODEL: ${UPSTREAM_MODEL:-openai/mock}
+      UPSTREAM_API_BASE: ${UPSTREAM_API_BASE:-http://mock-upstream:8000/v1}
+      UPSTREAM_API_KEY: ${UPSTREAM_API_KEY:-not-needed}
+      # Firewall settings (llmfirewall.engine.settings)
+      LLMFW_AUDIT_HMAC_KEY: ${LLMFW_AUDIT_HMAC_KEY:?set LLMFW_AUDIT_HMAC_KEY in .env}
+      LLMFW_POLICIES_DIR: /opt/llmfirewall/policies
+      LLMFW_IDENTITY_MAP_PATH: /etc/llmfirewall/identity.yaml
+      LLMFW_SECRETS_CATALOG_PATH: /opt/llmfirewall/secrets_catalog.json
+      LLMFW_STREAM_HOLDBACK_CHARS: ${LLMFW_STREAM_HOLDBACK_CHARS:-128}
+      LLMFW_STREAM_CONTEXT_CHARS: ${LLMFW_STREAM_CONTEXT_CHARS:-128}
+      LLMFW_STREAM_SCAN_STEP_CHARS: ${LLMFW_STREAM_SCAN_STEP_CHARS:-32}
+      # LiteLLM's own log level (litellm/_logging.py; proxy_cli.py also passes
+      # it to uvicorn). WARNING: no DEBUG/INFO output, which is where request
+      # bodies can appear. See litellm/config.yaml for the other settings.
+      LITELLM_LOG: WARNING
+      # No network at startup: bundled cost map, model baked into the image.
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"
+      HF_HUB_OFFLINE: "1"
+    ports:
+      - "127.0.0.1:${LITELLM_PORT:-4000}:4000"
+    healthcheck:
+      test:
+        - CMD
+        - /app/.venv/bin/python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/readiness', timeout=5)"
+      interval: 5s
+      timeout: 10s
+      retries: 60
+      start_period: 30s
+
+  # Creates the demo teams, users and keys through LiteLLM's API, then exits.
+  # Every key is created with allowed_routes limited to the chat routes.
+  bootstrap:
+    image: llmfirewall-bootstrap:dev
+    build:
+      context: ./bootstrap
+      # The official LiteLLM image, unchanged; its Python runs the script.
+      dockerfile_inline: |
+        FROM ghcr.io/berriai/litellm-database:v1.108.3@sha256:aecfcc459b5af208f04b8e916c9912cc3001798e013b4874be1831c20e4a2c26
+        COPY bootstrap.py /bootstrap/bootstrap.py
+    entrypoint: ["/app/.venv/bin/python", "/bootstrap/bootstrap.py"]
+    depends_on:
+      litellm:
+        condition: service_healthy
+    environment:
+      LITELLM_URL: http://litellm:4000
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      LLMFW_DEV_ALICE_KEY: ${LLMFW_DEV_ALICE_KEY:?set LLMFW_DEV_ALICE_KEY in .env}
+      LLMFW_DEV_BOB_KEY: ${LLMFW_DEV_BOB_KEY:?set LLMFW_DEV_BOB_KEY in .env}
+    restart: "no"
+
+  # Dev/test only: an OpenAI-compatible fake (mock_upstream/app.py).
+  mock-upstream:
+    image: llmfirewall-mock-upstream:dev
+    build:
+      context: ./mock_upstream
+      # The official LiteLLM image, unchanged; its FastAPI and uvicorn serve it.
+      dockerfile_inline: |
+        FROM ghcr.io/berriai/litellm-database:v1.108.3@sha256:aecfcc459b5af208f04b8e916c9912cc3001798e013b4874be1831c20e4a2c26
+        COPY app.py /mock/app.py
+    entrypoint:
+      ["/app/.venv/bin/python", "-m", "uvicorn", "app:app", "--app-dir", "/mock",
+       "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      MOCK_CHUNK_CHARS: ${MOCK_CHUNK_CHARS:-3}
+      MOCK_CHUNK_DELAY_MS: ${MOCK_CHUNK_DELAY_MS:-0}
+    ports:
+      - "127.0.0.1:${MOCK_PORT:-8001}:8000"
+    healthcheck:
+      test:
+        - CMD
+        - /app/.venv/bin/python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # Optional local model: docker compose --profile ollama up (README.md).
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama:0.40.14@sha256:ebaef4f4c5d93660e1f25f8ad085a112f51ccfb0e8458073e71793959dba91c9
+    volumes:
+      - ollama:/root/.ollama
+
+  ollama-pull:
+    profiles: ["ollama"]
+    image: ollama/ollama:0.40.14@sha256:ebaef4f4c5d93660e1f25f8ad085a112f51ccfb0e8458073e71793959dba91c9
+    depends_on: [ollama]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-qwen2.5:0.5b}"]
+    restart: "no"
+
+volumes:
+  pgdata:
+  ollama:

@@ -1,0 +1,47 @@
+# LiteLLM proxy config for the compose stack (litellm==1.108.3).
+
+model_list:
+  # One model name for clients. The upstream is chosen by environment:
+  # the mock (default) or Ollama (`--profile ollama`, see README.md).
+  - model_name: chat
+    litellm_params:
+      model: os.environ/UPSTREAM_MODEL
+      api_base: os.environ/UPSTREAM_API_BASE
+      api_key: os.environ/UPSTREAM_API_KEY
+
+guardrails:
+  - guardrail_name: llmfirewall
+    litellm_params:
+      guardrail: llmfirewall.adapters.litellm_guardrail.LLMFirewallGuardrail
+      # The adapter overrides should_run_guardrail to always run, so these
+      # two settings cannot be used to switch it off per request. They are
+      # required by LiteLLM's guardrail registry.
+      mode: [pre_call, post_call]
+      default_on: true
+
+# Keep request and response text out of everything LiteLLM writes. Each
+# setting is set explicitly instead of relying on its default; names and
+# behavior checked in the litellm==1.108.3 source. The log level itself is
+# LITELLM_LOG=WARNING in docker-compose.yml (litellm/_logging.py: it sets
+# the level of LiteLLM's log handler, and proxy_cli.py passes it to uvicorn).
+litellm_settings:
+  # litellm/__init__.py `turn_off_message_logging`: callbacks receive no
+  # message or response content.
+  turn_off_message_logging: true
+  # litellm/__init__.py `redact_messages_in_exceptions`: when false (the
+  # default), litellm_core_utils/exception_mapping_utils.py appends the
+  # request's messages to upstream exception text, which is then logged.
+  redact_messages_in_exceptions: true
+  # litellm/__init__.py `log_raw_request_response`: no raw request/response
+  # logging.
+  log_raw_request_response: false
+  # litellm/_logging.py `set_verbose` (deprecated debug switch): off.
+  set_verbose: false
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  # proxy/spend_tracking/spend_tracking_utils.py: with
+  # `store_prompts_in_spend_logs` false, prompt- and response-carrying
+  # fields are redacted before spend logs are written to Postgres.
+  store_prompts_in_spend_logs: false

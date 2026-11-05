@@ -176,6 +176,7 @@ class Engine:
             findings=tuple(result.findings),
             failures=tuple(result.failures),
             skipped=tuple(result.skipped),
+            durations_ms=dict(result.durations_ms),
             redacted_messages=redacted_messages,
             redacted_text=redacted_text,
         )

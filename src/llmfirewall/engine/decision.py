@@ -94,6 +94,8 @@ class Decision(BaseModel):
     findings: tuple[Finding, ...]
     failures: tuple[DetectorFailure, ...]
     skipped: tuple[str, ...]
+    # Time per detector that ran, in ms (audit only).
+    durations_ms: dict[str, float] = Field(default_factory=dict)
     # The content to forward when action is REDACT. Excluded from repr so
     # that logging a decision never logs text.
     redacted_messages: tuple[dict[str, Any], ...] | None = Field(

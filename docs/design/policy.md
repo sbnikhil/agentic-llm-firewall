@@ -73,7 +73,7 @@ Loading:
 - Files are parsed with `yaml.safe_load`. Before that, the same text is composed with `yaml.compose(..., Loader=yaml.SafeLoader)`, which builds only the node tree and constructs no objects, and any **duplicate key** is rejected. Plain `safe_load` keeps the last duplicate silently, so `action: block` followed later by `action: allow` would quietly allow.
 - Any problem raises `PolicyError` (a `ValueError`), with the file name and the field path. Policies are loaded at startup, so a bad policy stops the service from starting rather than being skipped.
 - API: `parse_policy(data, *, name, detectors) -> Policy`, `load_policy_file(path, *, detectors) -> Policy`, `load_policies(directory, *, detectors) -> dict[str, Policy]`. `load_policies` reads every `*.yaml` in the directory except `identity.yaml`, and fails if any one of them is invalid.
-- Settings: `LLMFW_POLICIES_DIR` (default `policies/`) and `LLMFW_IDENTITY_MAP_PATH` (default `policies/identity.yaml`). Nothing reads them yet; the adapter will.
+- Settings: `LLMFW_POLICIES_DIR` (default `policies/`) and `LLMFW_IDENTITY_MAP_PATH` (default `policies/identity.yaml`). The LiteLLM adapter reads them at startup ([ADR 0003](../decisions/0003-litellm-guardrail.md)).
 
 ### Parameters of the existing detectors
 
@@ -169,10 +169,12 @@ In LiteLLM, a `CustomGuardrail` hook receives `user_api_key_dict: UserAPIKeyAuth
 | every HTTP header, including `x-litellm-*` | no | Client-set. |
 | `UserAPIKeyAuth.metadata`, `team_metadata`, `key_alias`, `team_alias` | not used | Admin-set, but not identity. Kept out to keep the trust surface to two fields. |
 
-To confirm against the pinned LiteLLM version when the adapter is built (LiteLLM is not a dependency yet):
-- the attribute names, and that both are populated before the `pre_call` hook runs;
-- whether calls made with the master key get a sentinel `user_id` (possibly `"default_user_id"`), which would need an explicit mapping or must be treated as unmapped;
-- that no LiteLLM setting copies a client-set value into `user_id` or `team_id` (for example end-user or header-based identity options).
+Confirmed against `litellm==1.108.3` ([ADR 0003](../decisions/0003-litellm-guardrail.md)):
+- `user_id` and `team_id` are fields of `UserAPIKeyAuth`, set from the key's database record before the `pre_call` hook runs;
+- master-key calls get `user_id="default_user_id"` and no team, so they would be unmapped and get `default`. In practice the adapter blocks them, because the master key has no `allowed_routes` (below);
+- the other ways to set `user_id` are JWT auth, custom auth and OAuth2-proxy auth, none of which is enabled in `deploy/compose`. Enabling one needs its own review.
+
+**Route restriction.** The adapter also reads `UserAPIKeyAuth.allowed_routes`, only to fail closed and never to choose a policy. A key whose `allowed_routes` is unrestricted (None, an empty list or not a list, which LiteLLM treats as every route) is blocked with `403 "key has no allowed_routes"` before any other check. Every key must therefore be created with `allowed_routes` (deploy/compose/README.md, "Keys"). `VerifiedIdentity` still reads only `user_id` and `team_id`.
 
 ## 4. Findings (`decision.py`)
 
@@ -237,7 +239,7 @@ class Decision(BaseModel):  # frozen
     redacted_text: str | None  # repr=False; only when REDACT
 ```
 
-The redacted copy is the content to forward, so it lives on the `Decision`, but it is excluded from `repr` so that logging a decision does not log text. The audit module (later) will build its events from `findings`, `failures` and `skipped` only.
+The redacted copy is the content to forward, so it lives on the `Decision`, but it is excluded from `repr` so that logging a decision does not log text. The audit module (`engine/audit.py`) builds its events from `findings`, `failures`, `skipped` and `durations_ms` only (per-detector time, added for the audit log; no decision reads it).
 
 ## 6. Pipeline (`pipeline.py`)
 
@@ -344,4 +346,31 @@ Matches v0's behavior, so the evaluation baseline measures v0 truthfully. Change
 - **The latency budget is not a hard deadline.** The clock is checked after each detector call, so one slow call (for example a model stuck on a long input) runs to completion before the request fails closed. The latency task will add a hard deadline.
 - **Detector thresholds are not policy parameters** (section 2). They stay in settings until the detectors are changed.
 - **`output_leak` blocks any email or phone number in an answer**, so `pii` redaction of answers rarely matters under the shipped policies. This is v0 behavior, pinned on purpose.
-- **Tool-call arguments are not checked** (v2).
+- **Tool-call arguments are not checked** (v2). Specifically:
+  - In requests, `tool_calls` on assistant messages are never read. An assistant message with only `tool_calls` (`content` is `None`) passes with nothing checked, and when it has both, only `content` is checked.
+  - In non-streaming responses, `message.tool_calls` and `function_call` pass unchecked; only `message.content` is checked.
+  - In streams, tool-call deltas are forwarded as they arrive. They are not held back by the window and not scanned.
+
+  A model can therefore return a secret, or forward an injection, inside tool-call arguments.
+- **The PII detector tags random hex and letter tokens as PERSON or LOCATION.** spaCy's named-entity recognition (Presidio's default NLP engine, `en_core_web_lg`) labels many random tokens as names or places.
+
+  Measured on 2026-11-19 with the shipped analyzer (`models.presidio_analyzer().analyze(..., entities=REDACT_ENTITIES)`):
+  - over 300 strings `"hello nonce-<uuid4 hex>"`, it returned 64 PERSON and 6 LOCATION results;
+  - over 300 strings `"hello nonce<16 random lowercase letters>"`, it returned 183 PERSON and 22 LOCATION results.
+
+  Under any policy where `pii` redacts (`user` and `response` in `default`, every role in `strict`), request ids, hashes, tokens and similar text are often replaced with `[REDACTED:PERSON]`. Clients and tests must not rely on such tokens surviving the firewall; the e2e suite correlates requests by the OpenAI `seed` parameter for this reason. This is v0 behavior (pinned by the characterization tests) and belongs to the evaluation work.
+- **LiteLLM's `/milvus/*` pass-through echoes the request body in its error response.** Found in litellm 1.108.3, route `/milvus/{endpoint:path}` (`litellm/proxy/pass_through_endpoints/llm_passthrough_endpoints.py`, `milvus_proxy_route`, line 814: `detail=f"Collection name is required. Got {request_body}"`).
+
+  A body without `collectionName` is returned verbatim in a 400. This happens before the pre_call hook, so the guardrail never sees the request. The text goes back to the caller; in our tests it was not written to the proxy log.
+
+  Minimal reproduction, with a key allowed on `/milvus/*` and made-up data:
+
+  ```bash
+  curl -s -X POST http://localhost:4000/milvus/vectors/search \
+    -H "Authorization: Bearer sk-<virtual key>" \
+    -H 'Content-Type: application/json' \
+    -d '{"note": "example-text"}'
+  # 400 {"detail":"Collection name is required. Got {'note': 'example-text'}"}
+  ```
+
+  In `deploy/compose`, keys restricted to the chat routes cannot reach `/milvus/*`, and the e2e suite checks this. An unrestricted key would reach it, even though the guardrail blocks unrestricted keys, because this error comes before the hook.

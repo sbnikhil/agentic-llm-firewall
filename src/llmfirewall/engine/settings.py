@@ -8,6 +8,7 @@ Settings are read on first call to get_settings(), not at import.
 from functools import cache
 from pathlib import Path
 
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # src/llmfirewall/engine/settings.py -> repository root
@@ -33,6 +34,16 @@ class Settings(BaseSettings):
     # Policies (docs/design/policy.md)
     policies_dir: Path = REPO_ROOT / "policies"
     identity_map_path: Path = REPO_ROOT / "policies" / "identity.yaml"
+
+    # Streaming window (docs/decisions/0004-streaming.md). The defaults are
+    # not final: the final hold-back comes from the latency task.
+    stream_holdback_chars: int = Field(default=128, ge=0)  # N
+    stream_context_chars: int = Field(default=128, ge=0)  # C
+    stream_scan_step_chars: int = Field(default=32, ge=1)  # S
+
+    # Audit (engine/audit.py): key for the HMAC-SHA256 of the user id.
+    # SecretStr so the value never appears in a repr or a log line.
+    audit_hmac_key: SecretStr | None = None
 
 
 @cache

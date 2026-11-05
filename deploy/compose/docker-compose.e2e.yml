@@ -1,0 +1,20 @@
+# TEST ONLY. Fake provider credentials so LiteLLM's /anthropic/* and
+# /openai_passthrough/* pass-through routes are configured, with their base
+# URLs pointing at the mock upstream. The e2e suite uses them to prove that
+# our pre_call hook blocks these routes before anything reaches the mock,
+# and that restricted keys cannot call them at all.
+#
+# Never use this file outside the e2e suite:
+#   docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build --wait
+#
+# Variable names from litellm==1.108.3: ANTHROPIC_API_BASE / ANTHROPIC_API_KEY
+# (pass_through_endpoints/llm_passthrough_endpoints.py, anthropic_proxy_route)
+# and OPENAI_API_BASE / OPENAI_API_KEY (openai_proxy_route). The "chat" model
+# has its own api_base and api_key, so these do not affect it.
+services:
+  litellm:
+    environment:
+      ANTHROPIC_API_KEY: fake-e2e-not-a-real-key
+      ANTHROPIC_API_BASE: http://mock-upstream:8000
+      OPENAI_API_KEY: fake-e2e-not-a-real-key
+      OPENAI_API_BASE: http://mock-upstream:8000/
