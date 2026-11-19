@@ -85,9 +85,12 @@ jobs:
       - name: Audit every locked package
         run: |
           # en-core-web-lg is a GitHub-release URL dependency, not on PyPI, so it
-          # has no advisory data and pip-audit cannot pin it; it is excluded.
+          # has no advisory data and pip-audit cannot pin it; torch is a CPU-index
+          # wheel whose +cpu local version is also unavailable to PyPI auditing.
+          # Both are excluded.
           uv export --frozen --all-groups --no-emit-project \
             --no-emit-package en-core-web-lg \
+            --no-emit-package torch \
             --format requirements-txt -o audit-requirements.txt
           uv run pip-audit --disable-pip --strict --progress-spinner off \
             -r audit-requirements.txt
